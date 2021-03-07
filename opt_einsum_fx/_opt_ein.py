@@ -41,11 +41,10 @@ def optimize_einsums(graph: fx.Graph) -> fx.Graph:
                 # we can dispatch to opt_einsum and implicitly
                 # add it to the Graph by symbolically tracing it.
                 proxy_args = [
-                    fx.Proxy(env[x.name]) if isinstance(x, fx.Node) else x 
+                    fx.Proxy(env[x.name]) if isinstance(x, fx.Node) else x
                     for x in node.args
                 ]
-                print("path", path)
-                # Use _core_contract to avoid `len()` calls that 
+                # Use _core_contract to avoid `len()` calls that
                 # fx can't deal with
                 output_proxy = _core_contract(
                     proxy_args[1:],
