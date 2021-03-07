@@ -5,13 +5,14 @@ import torch
 import torch.fx
 from torch.fx.passes.shape_prop import ShapeProp
 
-from opt_einsum_fx import optimize_einsums
+from opt_einsum_fx import optimize_einsums, optimize_einsums_graph
 
 
 def einmatmul(x, y):
     return torch.einsum("ij,jk->ik", x, y)
 
-def test_optimize_einsums():
+
+def test_optimize_einsums_graph():
     x = torch.randn(3, 4)
     y = torch.randn(4, 5)
 
@@ -24,7 +25,7 @@ def test_optimize_einsums():
     func_fx_res = func_fx(x, y)
     assert torch.all(func_res == func_fx_res)
 
-    graph_opt = optimize_einsums(func_fx.graph)
+    graph_opt = optimize_einsums_graph(func_fx.graph)
     func_fx.graph = graph_opt
     func_fx.recompile()
 
@@ -39,8 +40,20 @@ def test_fallback():
     old_code = func_fx.code
 
     with pytest.warns(RuntimeWarning):
-        graph_opt = optimize_einsums(func_fx.graph)
+        graph_opt = optimize_einsums_graph(func_fx.graph)
 
     func_fx.graph = graph_opt
     func_fx.recompile()
     assert old_code == func_fx.code
+
+
+def test_torchscript():
+    x = torch.randn(3, 4)
+    y = torch.randn(4, 5)
+    func_res = einmatmul(x, y)
+    mod_opt = optimize_einsums(
+        einmatmul,
+        (x, y)
+    )
+    func_opt_res = mod_opt(x, y)
+    assert torch.allclose(func_opt_res, func_res)

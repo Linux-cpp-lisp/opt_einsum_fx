@@ -1,15 +1,38 @@
-from typing import Tuple, Dict, Any
+from typing import Callable, Union
 import warnings
 
 import torch
 from torch import fx
+from torch.fx.passes.shape_prop import ShapeProp
 
 import opt_einsum
 from opt_einsum.contract import _core_contract
 
 
+def optimize_einsums(
+    model: Union[torch.nn.Module, Callable],
+    example_inputs: tuple,
+    tracer_class: type = fx.Tracer
+) -> torch.nn.Module:
+    """
+    """
+    if isinstance(model, fx.GraphModule):
+        graph: fx.Graph = model.graph
+    else:
+        tracer: fx.Tracer = tracer_class()
+        graph: fx.Graph = tracer.trace(model)
+        model = tracer.root
+    out_mod = fx.GraphModule(model, graph)
+    # shapeprop
+    sp = ShapeProp(out_mod)
+    sp.run(*example_inputs)
+    out_mod.graph = optimize_einsums_graph(out_mod.graph)
+    out_mod.recompile()
+    return out_mod
+
+
 # Based on "Proxy Retracing" example in https://pytorch.org/docs/stable/fx.html
-def optimize_einsums(graph: fx.Graph) -> fx.Graph:
+def optimize_einsums_graph(graph: fx.Graph) -> fx.Graph:
     """Optimize einsums in a ``torch.fx.Graph``."""
     new_graph = fx.Graph()
     # env keeps track of new injected nodes in addition to existing ones,
