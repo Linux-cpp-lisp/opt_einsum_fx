@@ -143,14 +143,19 @@ def _accumulate_scalars(graph: fx.Graph):
                     break
 
             # Now assimilate inputs
-            for inp in node.args[1:]:
-                if len(inp.users) == 1:
+            for orig_inp in node.args[1:]:
+                inp = orig_inp
+                while len(inp.users) == 1:
                     # No one else uses this input
                     new_node, new_scalar = _get_node_and_scalar(inp)
                     if new_scalar is not None:
                         total_scalar *= new_scalar
                         inp.replace_all_uses_with(new_node)
                         graph.erase_node(inp)
+                        inp = new_node
+                    else:
+                        break
+
             # Now we need to add back in the accumulated scalar
             node.scalar_coefficient = total_scalar
 
