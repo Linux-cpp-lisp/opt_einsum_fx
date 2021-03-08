@@ -12,7 +12,7 @@ def einmatmul(x, y):
     return torch.einsum("ij,jk->ik", x, y)
 
 
-def test_optimize_einsums_graph():
+def test_optimize_einsums_graph(allclose):
     x = torch.randn(3, 4)
     y = torch.randn(4, 5)
 
@@ -30,8 +30,7 @@ def test_optimize_einsums_graph():
     func_fx.recompile()
 
     func_opt_res = func_fx(x, y)
-    # TODO: more forgiving threshold for numerics on float32
-    assert torch.allclose(func_opt_res, func_fx_res)
+    assert allclose(func_opt_res, func_fx_res)
 
 
 def test_fallback():
@@ -48,7 +47,7 @@ def test_fallback():
     assert old_code == func_fx.code
 
 
-def test_torchscript():
+def test_torchscript(allclose):
     x = torch.randn(3, 4)
     y = torch.randn(4, 5)
     func_res = einmatmul(x, y)
@@ -56,4 +55,4 @@ def test_torchscript():
     mod_opt = jitable(mod_opt)
     mod_opt = torch.jit.script(mod_opt)
     func_opt_res = mod_opt(x, y)
-    assert torch.allclose(func_opt_res, func_res)
+    assert allclose(func_opt_res, func_res)

@@ -6,7 +6,7 @@ import torch.fx
 from opt_einsum_fx import fuse_einsums, fuse_scalars
 
 
-def test_einsum_fuse():
+def test_einsum_fuse(allclose):
     def fusable(x, y):
         z = torch.einsum("ij,jk->ik", x, y)
         return torch.einsum("ik,ij->i", z, x)
@@ -18,7 +18,7 @@ def test_einsum_fuse():
     x, y = torch.randn(3, 4), torch.randn(4, 5)
     out_truth = fusable(x, y)
     out_fused = g(x, y)
-    assert torch.allclose(out_fused, out_truth)
+    assert allclose(out_fused, out_truth)
 
 
 def test_unfusable():
@@ -36,12 +36,14 @@ def test_unfusable():
     x, y = torch.randn(3, 4), torch.randn(4, 5)
     out_truth = unfusable(x, y)
     out_fused = g(x, y)
+    # Here we use normal allclose --- since unfusable is unfusable,
+    # nothing should have changed.
     assert torch.allclose(out_fused, out_truth)
     # Confirm no fusion:
     assert old_code == g.code
 
 
-def test_doublefuse():
+def test_doublefuse(allclose):
     def doublefuse(a, b, c, d):
         # quadruple matmul with a final transpose
         e1 = torch.einsum("ij,jk->ik", a, b)
@@ -60,7 +62,7 @@ def test_doublefuse():
     )
     out_truth = doublefuse(a, b, c, d)
     out_fused = g(a, b, c, d)
-    assert torch.allclose(out_fused, out_truth)
+    assert allclose(out_fused, out_truth)
 
 
 def test_inconsistent():
@@ -87,15 +89,15 @@ def scalar_fusable3(x, y):
 
 
 @pytest.mark.parametrize("func", (scalar_fusable1, scalar_fusable2, scalar_fusable3))
-def test_scalar_fuse(func):
+def test_scalar_fuse(allclose, func):
     g = torch.fx.symbolic_trace(func)
     new_graph = fuse_scalars(g.graph)
     g.graph = new_graph
-    # In both cases, after fusion, the graph should have 5 nodes:
+    # In all cases, after fusion, the graph should have 5 nodes:
     # two placeholders, one einsum, one mul, and one output
     assert len(g.graph.nodes) == 5
     g.recompile()
     x, y = torch.randn(3, 4), torch.randn(4, 5)
     out_truth = func(x, y)
     out_fused = g(x, y)
-    assert torch.allclose(out_fused, out_truth)
+    assert allclose(out_fused, out_truth)
