@@ -15,6 +15,13 @@ def unfusable(x, y):
     return torch.einsum("ik,ij->i", z, x) + z[:, 0]
 
 
+def doublefuse(a, b, c, d):
+    # quadruple matmul with a final transpose
+    e1 = torch.einsum("ij,jk->ik", a, b)
+    e2 = torch.einsum("ab,bc->ac", e1, c)
+    return torch.einsum("tr,ry->yt", e2, d)
+
+
 def test_einsum_fuse():
     g = torch.fx.symbolic_trace(fusable)
     new_graph = fuse_einsums(g.graph)
@@ -39,3 +46,19 @@ def test_unfusable():
     assert torch.allclose(out_fused, out_truth)
     # Confirm no fusion:
     assert old_code == g.code
+
+
+def test_doublefuse():
+    g = torch.fx.symbolic_trace(doublefuse)
+    new_graph = fuse_einsums(g.graph)
+    g.graph = new_graph
+    g.recompile()
+    a, b, c, d = (
+        torch.randn(3, 4),
+        torch.randn(4, 5),
+        torch.randn(5, 2),
+        torch.randn(2, 3),
+    )
+    out_truth = doublefuse(a, b, c, d)
+    out_fused = g(a, b, c, d)
+    assert torch.allclose(out_fused, out_truth)
