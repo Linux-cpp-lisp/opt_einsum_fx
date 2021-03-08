@@ -74,19 +74,29 @@ def test_inconsistent():
         _ = fuse_einsums(g.graph)
 
 
-def test_scalar_fuse():
-    def fusable1(x, y):
-        return torch.einsum("ij,jk->ik", x * 3.0, y) / 2
+def scalar_fusable1(x, y):
+    return torch.einsum("ij,jk->ik", x * 3.0, y) / 2
 
-    def fusable2(x, y):
-        return 7.0 * torch.einsum("ij,jk->ik", x, y / 3) / 2
 
-    for func in [fusable1, fusable2]:
-        g = torch.fx.symbolic_trace(func)
-        new_graph = fuse_scalars(g.graph)
-        g.graph = new_graph
-        g.recompile()
-        x, y = torch.randn(3, 4), torch.randn(4, 5)
-        out_truth = func(x, y)
-        out_fused = g(x, y)
-        assert torch.allclose(out_fused, out_truth)
+def scalar_fusable2(x, y):
+    return 7.0 * torch.einsum("ij,jk->ik", x, y / 3) / 2
+
+
+def scalar_fusable3(x, y):
+    return 7.0 * torch.einsum("ij,jk->ik", x, 2.0 * y / 3) / 2
+
+
+@pytest.mark.parametrize("func", (scalar_fusable1, scalar_fusable2, scalar_fusable3))
+def test_scalar_fuse(func):
+    g = torch.fx.symbolic_trace(func)
+    new_graph = fuse_scalars(g.graph)
+    g.graph = new_graph
+    # In both cases, after fusion, the graph should have 5 nodes:
+    # two placeholders, one einsum, one mul, and one output
+    print(g)
+    assert len(g.graph.nodes) == 5
+    g.recompile()
+    x, y = torch.randn(3, 4), torch.randn(4, 5)
+    out_truth = func(x, y)
+    out_fused = g(x, y)
+    assert torch.allclose(out_fused, out_truth)

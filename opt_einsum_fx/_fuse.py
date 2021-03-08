@@ -7,7 +7,6 @@ import numbers
 import torch
 from torch import fx
 
-
 _EINSUM_FUNCS = {torch.functional.einsum, torch.einsum}
 
 
@@ -131,7 +130,7 @@ def _accumulate_scalars(graph: fx.Graph):
             total_scalar = 1.0
             # First, find if this einsum is multipled/divided as its only use --
             # if it isn't, we can't fuse it with any following operations
-            if len(node.users) == 1:
+            while len(node.users) == 1:
                 user = list(node.users.keys())[0]
                 new_node, new_scalar = _get_node_and_scalar(user)
                 if new_scalar is not None:
@@ -139,6 +138,10 @@ def _accumulate_scalars(graph: fx.Graph):
                     # Eliminate the accumulated scalar multiplication
                     user.replace_all_uses_with(node)
                     graph.erase_node(user)
+                else:
+                    # The next user isn't a constant mul, so break
+                    break
+
             # Now assimilate inputs
             for inp in node.args[1:]:
                 if len(inp.users) == 1:
