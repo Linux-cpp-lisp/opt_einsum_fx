@@ -1,20 +1,20 @@
 from typing import Callable, Union
-import warnings
-import copy
 import string
+import copy
 
 import torch
 from torch import fx
-from torch.fx.passes.shape_prop import ShapeProp
 
 from ._opt_ein import _EINSUM_FUNCS
 
 
-def fuse_einsums(graph: fx.Graph) -> fx.Graph:
+def fuse_einsums(graph: fx.Graph, in_place: bool = False):
     """Fuse einsums when possible.
 
     When the output of one einsum is only used as an operand in another einsum, the two einsums can be fused into one.
     """
+    if not in_place:
+        graph = copy.deepcopy(graph)
 
     for node in graph.nodes:
         if node.op == "call_function" and node.target in _EINSUM_FUNCS:

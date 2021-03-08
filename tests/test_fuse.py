@@ -9,6 +9,12 @@ def fusable(x, y):
     return torch.einsum("ik,ij->i", z, x)
 
 
+def unfusable(x, y):
+    z = torch.einsum("ij,jk->ik", x, y)
+    # We use z as something besides an input to the second einsum, so it is unfusable
+    return torch.einsum("ik,ij->i", z, x) + z[:, 0]
+
+
 def test_einsum_fuse():
     g = torch.fx.symbolic_trace(fusable)
     new_graph = fuse_einsums(g.graph)
@@ -18,3 +24,18 @@ def test_einsum_fuse():
     out_truth = fusable(x, y)
     out_fused = g(x, y)
     assert torch.allclose(out_fused, out_truth)
+
+
+def test_unfusable():
+    g = torch.fx.symbolic_trace(unfusable)
+    old_code = g.code
+    new_graph = fuse_einsums(g.graph)
+    g.graph = new_graph
+    g.recompile()
+    # Confirm numerical equivalence
+    x, y = torch.randn(3, 4), torch.randn(4, 5)
+    out_truth = unfusable(x, y)
+    out_fused = g(x, y)
+    assert torch.allclose(out_fused, out_truth)
+    # Confirm no fusion:
+    assert old_code == g.code
