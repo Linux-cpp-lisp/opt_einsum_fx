@@ -111,6 +111,7 @@ def _get_node_and_scalar(node: fx.Node) -> Tuple[fx.Node, Optional[numbers.Numbe
             if isinstance(node.args[1], numbers.Number):
                 return node.args[0], 1.0 / node.args[1]
     elif node.op == "call_method":
+        # TODO: this could _technically_ be wrong if the nodes `self` argument is not a (proxy to) a Tensor
         if node.target == "mul" or node.target == "mul_":
             if isinstance(node.args[1], numbers.Number):
                 return node.args[0], node.args[1]

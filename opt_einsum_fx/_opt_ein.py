@@ -11,6 +11,8 @@ from opt_einsum.contract import _core_contract
 from ._fuse import fuse_einsums, _EINSUM_FUNCS
 
 
+# TODO: use _accumulate_scalars and shape information to optimize scalar muls
+# TODO: make the einsum fuser aware of scalar_coefficient
 def optimize_einsums(
     model: Union[torch.nn.Module, Callable],
     example_inputs: tuple,
@@ -20,6 +22,10 @@ def optimize_einsums(
 
     All of the restrictions of ``torch.fx`` symbolic tracing apply.
 
+    Applies, in order, three optimizations:
+        1. Scalar accumulation --- use the multilinearity of einsum to collect all constant coefficients and divisors of operands and outputs
+        2. Fusing einsums --- gives greater flexibility to (3)
+        3. Optimized contraction with ``opt_einsum``.
 
     Args:
         model (torch.nn.Module or callable): the model or function to optimize
@@ -46,7 +52,7 @@ def optimize_einsums(
 
 # Based on "Proxy Retracing" example in https://pytorch.org/docs/stable/fx.html
 def optimize_einsums_graph(graph: fx.Graph) -> fx.Graph:
-    """Optimize einsums in a ``torch.fx.Graph``.
+    """Optimize einsums in a ``torch.fx.Graph`` using ``opt_einsum``.
 
     ``graph`` must have shape information such as that populated by ``torch.fx.passes.shape_prop.ShapeProp``.
     """
