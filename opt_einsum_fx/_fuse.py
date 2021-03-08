@@ -22,6 +22,7 @@ def fuse_einsums(graph: fx.Graph, in_place: bool = False):
             # TODO: deal with no output indexes
             our_inp_einstrs, our_out_einstr = node.args[0].split("->")
             our_inp_einstrs = our_inp_einstrs.split(",")
+            assert len(our_inp_einstrs) == len(node.args) - 1
             avail_letters = iter(
                 set(string.ascii_lowercase)
                 - set.union(*(set(e) for e in our_inp_einstrs))
@@ -41,7 +42,10 @@ def fuse_einsums(graph: fx.Graph, in_place: bool = False):
                     # TODO: deal with no output indexes
                     its_inp_einstrs, its_out_einstr = inp.args[0].split("->")
                     its_inp_einstrs = its_inp_einstrs.split(",")
-                    assert len(its_out_einstr) == len(our_inp_einstrs[inp_idex])
+                    if len(its_out_einstr) != len(our_inp_einstrs[inp_idex]):
+                        raise RuntimeError(
+                            f"Inconsistent rank: einsum `{node}`'s input {inp_idex} is the result of einsum {inp}; the output of `{inp}` is labeled `{its_out_einstr}` (rank {len(its_out_einstr)}), but the corresponding input of `{node}` is labeled `{our_inp_einstrs[inp_idex]}` (rank {len(our_inp_einstrs[inp_idex])})"
+                        )
                     # First, we need to figure out which of its output dimensions correspond to our dimensions:
                     its_dim_to_ours = dict(
                         zip(its_out_einstr, our_inp_einstrs[inp_idex])

@@ -1,3 +1,5 @@
+import pytest
+
 import torch
 import torch.fx
 
@@ -62,3 +64,15 @@ def test_doublefuse():
     out_truth = doublefuse(a, b, c, d)
     out_fused = g(a, b, c, d)
     assert torch.allclose(out_fused, out_truth)
+
+
+def inconsistent(x, y):
+    z = torch.einsum("ij,jk->ik", x, y)
+    # Note that the dimension labels for z have the wrong length
+    return torch.einsum("i,ij->i", z, x)
+
+
+def test_inconsistent():
+    g = torch.fx.symbolic_trace(inconsistent)
+    with pytest.raises(RuntimeError):
+        _ = fuse_einsums(g.graph)
