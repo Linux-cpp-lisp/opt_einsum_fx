@@ -1,19 +1,24 @@
-from typing import Callable, Union
+from typing import Optional, Tuple
 import string
 import copy
+import operator
+import numbers
 
 import torch
 from torch import fx
 
 
-def fuse_einsums(graph: fx.Graph, in_place: bool = False):
+_EINSUM_FUNCS = {torch.functional.einsum, torch.einsum}
+
+
+# == Einsum fusion ==
+
+
+def fuse_einsums(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
     """Fuse einsums when possible.
 
     When the output of one einsum is only used as an operand in another einsum, the two einsums can be fused into one.
     """
-    # Avoid circular import
-    from ._opt_ein import _EINSUM_FUNCS
-
     if not in_place:
         graph = copy.deepcopy(graph)
 
@@ -87,4 +92,79 @@ def fuse_einsums(graph: fx.Graph, in_place: bool = False):
                 graph.erase_node(to_remove)
         # -- end case for einsum nodes --
     # -- end iter over nodes --
+    return graph
+
+
+# == Scalar fusion ==
+
+
+# TODO: should the accumulation of constants happen in more than double precision?
+def _get_node_and_scalar(node: fx.Node) -> Tuple[fx.Node, Optional[numbers.Number]]:
+    """Get a multiplicative scalar for an operation, if applicable."""
+    # This supports in-place *= and /= because fx traces them as normal operator.mul/div.
+    if node.op == "call_function":
+        if node.target == operator.mul or node.target == torch.mul:
+            if isinstance(node.args[0], numbers.Number):
+                return node.args[1], node.args[0]
+            elif isinstance(node.args[1], numbers.Number):
+                return node.args[0], node.args[1]
+        elif node.target == operator.truediv or node.target == torch.div:
+            if isinstance(node.args[1], numbers.Number):
+                return node.args[0], 1.0 / node.args[1]
+    elif node.op == "call_method":
+        if node.target == "mul" or node.target == "mul_":
+            if isinstance(node.args[1], numbers.Number):
+                return node.args[0], node.args[1]
+        elif node.target == "div" or node.target == "div_":
+            if isinstance(node.args[1], numbers.Number):
+                return node.args[0], 1.0 / node.args[1]
+    return node, None
+
+
+def _accumulate_scalars(graph: fx.Graph):
+    """Use the multilinearity of einsum to unify and remove constant scalars around einsums.
+
+    This is NOT a transformation --- it is a convinience function that collects information into einsum nodes and REMOVES other nodes, making the graph incorrect. It should only be used with a transformation that puts them back.
+    """
+    for node in graph.nodes:
+        if node.op == "call_function" and node.target in _EINSUM_FUNCS:
+            total_scalar = 1.0
+            # First, find if this einsum is multipled/divided as its only use --
+            # if it isn't, we can't fuse it with any following operations
+            if len(node.users) == 1:
+                user = list(node.users.keys())[0]
+                new_node, new_scalar = _get_node_and_scalar(user)
+                if new_scalar is not None:
+                    total_scalar *= new_scalar
+                    # Eliminate the accumulated scalar multiplication
+                    user.replace_all_uses_with(node)
+                    graph.erase_node(user)
+            # Now assimilate inputs
+            for inp in node.args[1:]:
+                if len(inp.users) == 1:
+                    # No one else uses this input
+                    new_node, new_scalar = _get_node_and_scalar(inp)
+                    if new_scalar is not None:
+                        total_scalar *= new_scalar
+                        inp.replace_all_uses_with(new_node)
+                        graph.erase_node(inp)
+            # Now we need to add back in the accumulated scalar
+            node.scalar_coefficient = total_scalar
+
+
+def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
+    """Use the multilinearity of einsum to unify and remove constant scalars around einsums."""
+    if not in_place:
+        graph = copy.deepcopy(graph)
+
+    _accumulate_scalars(graph)
+
+    for node in graph.nodes:
+        if node.op == "call_function" and node.target in _EINSUM_FUNCS:
+            if hasattr(node, "scalar_coefficient"):
+                with graph.inserting_after(node):
+                    new_node = graph.call_method("mul", tuple())  # placeholder
+                    node.replace_all_uses_with(new_node)
+                    new_node.args = (node, node.scalar_coefficient)
+    graph.lint()
     return graph

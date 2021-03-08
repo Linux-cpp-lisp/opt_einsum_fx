@@ -8,10 +8,7 @@ from torch.fx.passes.shape_prop import ShapeProp
 import opt_einsum
 from opt_einsum.contract import _core_contract
 
-from ._fuse import fuse_einsums
-
-
-_EINSUM_FUNCS = {torch.functional.einsum, torch.einsum}
+from ._fuse import fuse_einsums, _EINSUM_FUNCS
 
 
 def optimize_einsums(
