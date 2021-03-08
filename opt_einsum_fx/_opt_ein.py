@@ -9,12 +9,23 @@ import opt_einsum
 from opt_einsum.contract import _core_contract
 
 
+_EINSUM_FUNCS = {torch.functional.einsum, torch.einsum}
+
+
 def optimize_einsums(
     model: Union[torch.nn.Module, Callable],
     example_inputs: tuple,
-    tracer_class: type = fx.Tracer
+    tracer_class: type = fx.Tracer,
 ) -> torch.nn.Module:
-    """
+    """Optimize einsums in ``model`` for ``example_inputs``.
+
+    All of the restrictions of ``torch.fx`` symbolic tracing apply.
+
+
+    Args:
+        model (torch.nn.Module or callable): the model or function to optimize
+        example_inputs (tuple): arguments to ``model`` whose shapes will determine the einsum optimizations.
+        tracer_class (type, optional): the tracer class to use to turn ``model`` into an ``fx.Graph``.
     """
     if isinstance(model, fx.GraphModule):
         graph: fx.Graph = model.graph
@@ -33,7 +44,10 @@ def optimize_einsums(
 
 # Based on "Proxy Retracing" example in https://pytorch.org/docs/stable/fx.html
 def optimize_einsums_graph(graph: fx.Graph) -> fx.Graph:
-    """Optimize einsums in a ``torch.fx.Graph``."""
+    """Optimize einsums in a ``torch.fx.Graph``.
+
+    ``graph`` must have shape information such as that populated by ``torch.fx.passes.shape_prop.ShapeProp``.
+    """
     new_graph = fx.Graph()
     # env keeps track of new injected nodes in addition to existing ones,
     # making sure they get into new_graph
@@ -41,7 +55,7 @@ def optimize_einsums_graph(graph: fx.Graph) -> fx.Graph:
     node_processed: bool = False
     for node in graph.nodes:
         node_processed = False
-        if node.op == 'call_function' and node.target == torch.einsum:
+        if node.op == "call_function" and node.target in _EINSUM_FUNCS:
             # Get shapes:
             try:
                 shapes = [a.shape for a in node.args[1:]]
@@ -50,15 +64,13 @@ def optimize_einsums_graph(graph: fx.Graph) -> fx.Graph:
                     f"einsum {repr(node)} lacked shape information; "
                     "not optimizing. "
                     "Did you forget to run ShapeProp on this graph?",
-                    RuntimeWarning
+                    RuntimeWarning,
                 )
             else:
                 # We have shapes, so:
                 # Determine the optimal contraction
                 path, path_info = opt_einsum.contract_path(
-                    node.args[0],  # the einstr
-                    *shapes,
-                    shapes=True
+                    node.args[0], *shapes, shapes=True  # the einstr
                 )
                 # By wrapping the arguments with proxies,
                 # we can dispatch to opt_einsum and implicitly
@@ -72,8 +84,8 @@ def optimize_einsums_graph(graph: fx.Graph) -> fx.Graph:
                 output_proxy = _core_contract(
                     proxy_args[1:],
                     path_info.contraction_list,
-                    backend='torch',
-                    evaluate_constants=False
+                    backend="torch",
+                    evaluate_constants=False,
                 )
 
                 # Operations on `Proxy` always yield new `Proxy`s, and the
