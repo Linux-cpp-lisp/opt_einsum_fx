@@ -5,7 +5,7 @@ import torch
 import torch.fx
 from torch.fx.passes.shape_prop import ShapeProp
 
-from opt_einsum_fx import optimize_einsums, optimize_einsums_graph
+from opt_einsum_fx import optimize_einsums, optimize_einsums_graph, jitable
 
 
 def einmatmul(x, y):
@@ -30,6 +30,7 @@ def test_optimize_einsums_graph():
     func_fx.recompile()
 
     func_opt_res = func_fx(x, y)
+    # TODO: more forgiving threshold for numerics on float32
     assert torch.allclose(func_opt_res, func_fx_res)
 
 
@@ -51,9 +52,8 @@ def test_torchscript():
     x = torch.randn(3, 4)
     y = torch.randn(4, 5)
     func_res = einmatmul(x, y)
-    mod_opt = optimize_einsums(
-        einmatmul,
-        (x, y)
-    )
+    mod_opt = optimize_einsums(einmatmul, (x, y))
+    mod_opt = jitable(mod_opt)
+    mod_opt = torch.jit.script(mod_opt)
     func_opt_res = mod_opt(x, y)
     assert torch.allclose(func_opt_res, func_res)
