@@ -5,14 +5,15 @@ import copy
 import torch
 from torch import fx
 
-from ._opt_ein import _EINSUM_FUNCS
-
 
 def fuse_einsums(graph: fx.Graph, in_place: bool = False):
     """Fuse einsums when possible.
 
     When the output of one einsum is only used as an operand in another einsum, the two einsums can be fused into one.
     """
+    # Avoid circular import
+    from ._opt_ein import _EINSUM_FUNCS
+
     if not in_place:
         graph = copy.deepcopy(graph)
 
