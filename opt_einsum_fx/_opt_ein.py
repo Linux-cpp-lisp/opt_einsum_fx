@@ -1,4 +1,4 @@
-from typing import Callable, Union
+from typing import Callable, Union, Optional
 import warnings
 
 import torch
@@ -16,6 +16,7 @@ from ._fuse import fuse_einsums, _EINSUM_FUNCS
 def optimize_einsums(
     model: Union[torch.nn.Module, Callable],
     example_inputs: tuple,
+    contract_kwargs: dict = {},
     tracer_class: type = fx.Tracer,
 ) -> torch.nn.Module:
     """Optimize einsums in ``model`` for ``example_inputs``.
@@ -45,17 +46,23 @@ def optimize_einsums(
     # shapeprop
     sp = ShapeProp(out_mod)
     sp.run(*example_inputs)
-    out_mod.graph = optimize_einsums_graph(out_mod.graph)
+    out_mod.graph = optimize_einsums_graph(out_mod.graph, contract_kwargs)
     out_mod.recompile()
     return out_mod
 
 
 # Based on "Proxy Retracing" example in https://pytorch.org/docs/stable/fx.html
-def optimize_einsums_graph(graph: fx.Graph) -> fx.Graph:
+def optimize_einsums_graph(graph: fx.Graph, contract_kwargs: dict = {}) -> fx.Graph:
     """Optimize einsums in a ``torch.fx.Graph`` using ``opt_einsum``.
 
     ``graph`` must have shape information such as that populated by ``torch.fx.passes.shape_prop.ShapeProp``.
     """
+    defaults = {
+        "optimize": "optimal",
+    }
+    defaults.update(contract_kwargs)
+    contract_kwargs = defaults
+
     new_graph = fx.Graph()
     # env keeps track of new injected nodes in addition to existing ones,
     # making sure they get into new_graph
@@ -78,7 +85,10 @@ def optimize_einsums_graph(graph: fx.Graph) -> fx.Graph:
                 # We have shapes, so:
                 # Determine the optimal contraction
                 path, path_info = opt_einsum.contract_path(
-                    node.args[0], *shapes, shapes=True  # the einstr
+                    node.args[0],  # the einstr
+                    *shapes,
+                    shapes=True,
+                    **contract_kwargs,
                 )
                 # By wrapping the arguments with proxies,
                 # we can dispatch to opt_einsum and implicitly
