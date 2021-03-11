@@ -4,6 +4,7 @@ import torch
 from torch import fx
 
 
+# see https://github.com/pytorch/pytorch/issues/53487
 def jitable(obj: Union[fx.GraphModule, fx.Graph]) -> Union[fx.GraphModule, fx.Graph]:
     """Convert some torch calls into their TorchScript signatures.
 
