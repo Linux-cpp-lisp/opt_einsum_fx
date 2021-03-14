@@ -8,7 +8,7 @@ from torch.fx.passes.shape_prop import ShapeProp
 import opt_einsum
 from opt_einsum.contract import _core_contract
 
-from ._fuse import fuse_einsums, _EINSUM_FUNCS
+from ._fuse import fuse_einsums, fuse_scalars, _EINSUM_FUNCS
 
 
 # TODO: use _accumulate_scalars and shape information to optimize scalar muls
@@ -39,15 +39,29 @@ def optimize_einsums(
         tracer: fx.Tracer = tracer_class()
         graph: fx.Graph = tracer.trace(model)
         model = tracer.root
-    # Before optimizing, fuse any einsums we can
+    # 1. Scalar accumulation
+    # without shape information, this just accumulates scalars and moves them to the end of chains of linear operations
+    graph = fuse_scalars(graph)
+    # 2. Fuse any einsums we can
     # This gives opt_einsum the most freedom possible to rearange things
-    graph = fuse_einsums(graph)
+    # Since we already moved scalars to the end of chains of linear operations, any scalars between linear operations should already have been moved
+    graph = fuse_einsums(graph, in_place=True)
     out_mod = fx.GraphModule(model, graph)
-    # shapeprop
+    # 3. Shape propagation
     sp = ShapeProp(out_mod)
     sp.run(*example_inputs)
+    # 4. Optimize einsums
     out_mod.graph = optimize_einsums_graph(out_mod.graph, contract_kwargs)
     out_mod.recompile()
+    # 5. Shape prop (again)
+    # We need shapes to put the scalars in the best place
+    sp = ShapeProp(out_mod)
+    sp.run(*example_inputs)
+    # 6. Final scalar fusion to move scalars
+    print("before last scalar", out_mod.graph)
+    out_mod.graph = fuse_scalars(out_mod.graph, in_place=True)
+    out_mod.recompile()
+    print("after last scalar", out_mod.graph)
     return out_mod
 
 

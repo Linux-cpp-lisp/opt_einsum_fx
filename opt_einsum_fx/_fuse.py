@@ -192,7 +192,7 @@ def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
                 # End this chain
                 break
 
-        # TODO: configurable threshold?
+        # TODO: configurable threshold
         if len(cur_linear_chain) > 1 or cur_scalar != 1.0:
             # If the next user, which is now in node, was seen but is itself in a linear chain, this means we merge them
             # TODO: thoroughly test this
@@ -205,7 +205,13 @@ def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
                 scalars.append(cur_scalar)
     del seen_nodes
 
+    print("lin_chains", linear_chains)
+    print("scalars", scalars)
+
     for lin_chain_i, lin_chain in enumerate(linear_chains):
+        if scalars[lin_chain_i] == 1.0:
+            # No reason to add back a scalar that does nothing
+            continue
         # Find the smallest argument or the output
         smallest_node_i = None
         smallest_arg_i = None

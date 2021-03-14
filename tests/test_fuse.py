@@ -111,10 +111,8 @@ def scalar_unfusable(x, y):
 def test_scalar_fuse(allclose, func):
     func, truth_num_nodes = func
     g = torch.fx.symbolic_trace(func)
-    print("orig graph\n", g.graph)
     new_graph = fuse_scalars(g.graph)
     g.graph = new_graph
-    print("new graph\n", g.graph)
     assert len(g.graph.nodes) == truth_num_nodes
     g.recompile()
     x, y = torch.randn(3, 4), torch.randn(4, 5)

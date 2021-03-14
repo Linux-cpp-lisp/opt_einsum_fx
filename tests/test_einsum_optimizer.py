@@ -22,13 +22,34 @@ def fusable(x, y):
     return torch.einsum("ik,ij->i", z, x)
 
 
+def fusable_w_scalars(x, y):
+    z = torch.einsum("ij,jk->ik", x, y) / 3.0
+    return 4.0 * torch.einsum("ik,ij->i", z, x)
+
+
 def unfusable(x, y):
     z = torch.einsum("ij,jk->ik", x, y)
     # We use z as something besides an input to the second einsum, so it is unfusable
     return torch.einsum("ik,ij->i", z, x) + z[:, 0]
 
 
-@pytest.fixture(scope="module", params=[einmatmul, eintrace, fusable, unfusable])
+def unfusable_w_scalars(x, y):
+    z = 2.7 * torch.einsum("ij,jk->ik", x, y)
+    # We use z as something besides an input to the second einsum, so it is unfusable
+    return torch.einsum("ik,ij->i", z, x) + 1.1 * z[:, 0]
+
+
+@pytest.fixture(
+    scope="module",
+    params=[
+        einmatmul,
+        eintrace,
+        fusable,
+        fusable_w_scalars,
+        unfusable,
+        unfusable_w_scalars,
+    ],
+)
 def einfunc(request):
     return request.param
 
@@ -52,6 +73,14 @@ def test_optimize_einsums_graph(einfunc, allclose):
 
     func_opt_res = func_fx(x, y)
     assert allclose(func_opt_res, func_fx_res)
+
+
+def test_optimize_einsums(einfunc, allclose):
+    x = torch.randn(3, 4)
+    y = torch.randn(4, 5)
+    func_res = einfunc(x, y)
+    func_opt = optimize_einsums(einfunc, (x, y))
+    assert allclose(func_res, func_opt(x, y))
 
 
 def test_fallback(einfunc):
