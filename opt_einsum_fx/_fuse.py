@@ -108,7 +108,6 @@ def fuse_einsums(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
 
 # == Scalar fusion ==
 
-
 # TODO: should the accumulation of constants happen in more than double precision?
 def _get_node_and_scalar(node: fx.Node) -> Tuple[fx.Node, Optional[numbers.Number]]:
     """Get a multiplicative scalar for an operation, if applicable."""
@@ -133,44 +132,27 @@ def _get_node_and_scalar(node: fx.Node) -> Tuple[fx.Node, Optional[numbers.Numbe
     return node, None
 
 
-def _accumulate_scalars(graph: fx.Graph):
-    """Use the multilinearity of einsum to unify and remove constant scalars around einsums.
+# Operations that are (almost) "multilinear", in the sense that they commute with scalar multiplication of their operands
+SCALAR_COMMUTE_OPS = [
+    torch.einsum,
+    torch.functional.einsum,
+    torch.tensordot,
+    torch.functional.tensordot,
+    "permute",
+    "reshape",
+    "mul",
+    "div",
+    operator.mul,
+    operator.truediv,
+]
 
-    This is NOT a transformation --- it is a convinience function that collects information into einsum nodes and REMOVES other nodes, making the graph incorrect. It should only be used with a transformation that puts them back.
-    """
-    for node in graph.nodes:
-        if node.op == "call_function" and node.target in _EINSUM_FUNCS:
-            total_scalar = 1.0
-            # First, find if this einsum is multipled/divided as its only use --
-            # if it isn't, we can't fuse it with any following operations
-            while len(node.users) == 1:
-                user = list(node.users.keys())[0]
-                new_node, new_scalar = _get_node_and_scalar(user)
-                if new_scalar is not None:
-                    total_scalar *= new_scalar
-                    # Eliminate the accumulated scalar multiplication
-                    user.replace_all_uses_with(node)
-                    graph.erase_node(user)
-                else:
-                    # The next user isn't a constant mul, so break
-                    break
 
-            # Now assimilate inputs
-            for orig_inp in node.args[1:]:
-                inp = orig_inp
-                while len(inp.users) == 1:
-                    # No one else uses this input
-                    new_node, new_scalar = _get_node_and_scalar(inp)
-                    if new_scalar is not None:
-                        total_scalar *= new_scalar
-                        inp.replace_all_uses_with(new_node)
-                        graph.erase_node(inp)
-                        inp = new_node
-                    else:
-                        break
-
-            # Now we need to add back in the accumulated scalar
-            node.scalar_coefficient = total_scalar
+def prod(x):
+    """Compute the product of a sequence."""
+    out = 1
+    for a in x:
+        out *= a
+    return out
 
 
 def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
@@ -178,14 +160,88 @@ def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
     if not in_place:
         graph = copy.deepcopy(graph)
 
-    _accumulate_scalars(graph)
-
+    # Find chains of multilinear ops
+    seen_nodes = set()
+    linear_chains = []
+    scalars = []
     for node in graph.nodes:
-        if node.op == "call_function" and node.target in _EINSUM_FUNCS:
-            if hasattr(node, "scalar_coefficient"):
-                with graph.inserting_after(node):
-                    new_node = graph.call_method("mul", tuple())  # placeholder
-                    node.replace_all_uses_with(new_node)
-                    new_node.args = (node, node.scalar_coefficient)
+        if id(node) in seen_nodes:
+            continue
+
+        cur_linear_chain = []
+        cur_scalar = 1.0
+        while (
+            id(node) not in seen_nodes
+            and getattr(node, "target", None) in SCALAR_COMMUTE_OPS
+        ):
+            seen_nodes.add(id(node))
+            node.in_lin_chain = len(linear_chains)
+            new_node, scalar = _get_node_and_scalar(node)
+            if scalar is not None:
+                cur_scalar *= scalar
+                node.replace_all_uses_with(new_node)
+                graph.erase_node(node)
+                node = new_node
+            else:
+                cur_linear_chain.append(node)
+            # Save the current node to check if its time to break the chain
+            old_node = node
+            # Continue building the chain regardless, since the merger uses this
+            node = list(node.users.keys())[0]
+            if len(old_node.users) != 1:
+                # End this chain
+                break
+
+        # TODO: configurable threshold?
+        if len(cur_linear_chain) > 1 or cur_scalar != 1.0:
+            # If the next user, which is now in node, was seen but is itself in a linear chain, this means we merge them
+            # TODO: thoroughly test this
+            if hasattr(node, "in_lin_chain"):
+                print("node in chain", node.in_lin_chain)
+                linear_chains[node.in_lin_chain].extend(cur_linear_chain)
+                scalars[node.in_lin_chain] *= cur_scalar
+            else:
+                linear_chains.append(cur_linear_chain)
+                scalars.append(cur_scalar)
+    del seen_nodes
+
+    for lin_chain_i, lin_chain in enumerate(linear_chains):
+        # Find the smallest argument or the output
+        smallest_node_i = None
+        smallest_arg_i = None
+        smallest_size = float("inf")
+        for node_i, node in enumerate(lin_chain):
+            for arg_i, arg in enumerate(node.args):
+                if hasattr(arg, "shape"):
+                    if prod(arg.shape) < smallest_size:
+                        smallest_node_i = node_i
+                        smallest_arg_i = arg_i
+                        smallest_size = prod(arg.shape)
+
+        # Put the accumulated scalar on a node
+        if (smallest_node_i is None) or (
+            hasattr(lin_chain[-1], "shape")
+            and prod(lin_chain[-1].shape) < smallest_size
+        ):
+            # The output is the smallest, put it there
+            # OR if there was no smallest argument, put it on the end of the chain
+            with graph.inserting_after(lin_chain[-1]):
+                new_node = graph.call_method("mul", tuple())  # placeholder
+                lin_chain[-1].replace_all_uses_with(new_node)
+                new_node.args = (lin_chain[-1], scalars[lin_chain_i])
+        else:
+            # The smallest was someone's arg, so we replace that with a scalar multiplication:
+            with graph.inserting_before(lin_chain[smallest_node_i]):
+                new_arg = graph.call_function(
+                    operator.mul,
+                    (
+                        lin_chain[smallest_node_i].args[smallest_arg_i],
+                        scalars[lin_chain_i],
+                    ),
+                )
+                new_args = list(lin_chain[smallest_node_i].args)
+                new_args[smallest_arg_i] = new_arg
+                lin_chain[smallest_node_i].args = tuple(new_args)
+
     graph.lint()
     return graph
