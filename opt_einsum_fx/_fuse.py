@@ -180,11 +180,15 @@ def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
             seen_nodes.add(id(node))
             node.in_lin_chain = len(linear_chains)
             cur_linear_chain.append(node)
-            # Save the current node to check if its time to break the chain
-            old_node = node
             # Continue building the chain regardless, since the merger uses this
-            node = list(node.users.keys())[0]
-            if len(old_node.users) != 1:
+            users = list(node.users.keys())
+            if len(users) > 0:
+                # Get the next node in the chain
+                node = users[0]
+            else:
+                # This isn't used in the graph at all, break the chain
+                node = None
+            if len(users) != 1:
                 # End this chain
                 break
 

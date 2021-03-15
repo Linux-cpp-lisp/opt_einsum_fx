@@ -111,6 +111,11 @@ def in_place(x, y):
     return 3.0 * b
 
 
+def unused(x, y):
+    b = 2.3 * x / 4.5  # noqa
+    return 4.6 * torch.einsum("ij,jk->ik", x, y)
+
+
 def constants(x, y):
     return math.pi * torch.einsum("ij,jk->ik", x, math.e * y / 3) / 2
 
@@ -131,6 +136,7 @@ def constants(x, y):
         (just_many_scalars, 4),
         (in_place, 6),
         (constants, 5),
+        (unused, 6),
     ],
 )
 def test_scalar_fuse(allclose, func):
