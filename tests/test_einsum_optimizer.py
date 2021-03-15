@@ -4,7 +4,7 @@ import torch
 import torch.fx
 from torch.fx.passes.shape_prop import ShapeProp
 
-from opt_einsum_fx import optimize_einsums, optimize_einsums_graph, jitable
+from opt_einsum_fx import optimize_einsums, optimize_einsums_full, jitable
 
 
 def einmatmul(x, y):
@@ -67,7 +67,7 @@ def einfunc(request):
     return request.param
 
 
-def test_optimize_einsums_graph(einfunc, allclose):
+def test_optimize_einsums(einfunc, allclose):
     x = torch.randn(3, 4)
     y = torch.randn(4, 5)
 
@@ -80,7 +80,7 @@ def test_optimize_einsums_graph(einfunc, allclose):
     func_fx_res = func_fx(x, y)
     assert torch.all(func_res == func_fx_res)
 
-    graph_opt = optimize_einsums_graph(func_fx.graph)
+    graph_opt = optimize_einsums(func_fx.graph)
     func_fx.graph = graph_opt
     func_fx.recompile()
 
@@ -88,11 +88,11 @@ def test_optimize_einsums_graph(einfunc, allclose):
     assert allclose(func_opt_res, func_fx_res)
 
 
-def test_optimize_einsums(einfunc, allclose):
+def test_optimize_einsums_full(einfunc, allclose):
     x = torch.randn(3, 4)
     y = torch.randn(4, 5)
     func_res = einfunc(x, y)
-    func_opt = optimize_einsums(einfunc, (x, y))
+    func_opt = optimize_einsums_full(einfunc, (x, y))
     assert allclose(func_res, func_opt(x, y))
 
 
@@ -105,7 +105,7 @@ def test_fallback():
     old_code = func_fx.code
 
     with pytest.warns(RuntimeWarning):
-        graph_opt = optimize_einsums_graph(func_fx.graph)
+        graph_opt = optimize_einsums(func_fx.graph)
 
     func_fx.graph = graph_opt
     func_fx.recompile()
@@ -116,7 +116,7 @@ def test_torchscript(einfunc, allclose):
     x = torch.randn(3, 4)
     y = torch.randn(4, 5)
     func_res = einfunc(x, y)
-    mod_opt = optimize_einsums(einfunc, (x, y))
+    mod_opt = optimize_einsums_full(einfunc, (x, y))
     mod_opt = jitable(mod_opt)
     mod_opt = torch.jit.script(mod_opt)
     func_opt_res = mod_opt(x, y)

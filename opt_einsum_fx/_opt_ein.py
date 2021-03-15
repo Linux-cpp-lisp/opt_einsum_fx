@@ -11,9 +11,7 @@ from opt_einsum.contract import _core_contract
 from ._fuse import fuse_einsums, fuse_scalars, _EINSUM_FUNCS
 
 
-# TODO: use _accumulate_scalars and shape information to optimize scalar muls
-# TODO: make the einsum fuser aware of scalar_coefficient
-def optimize_einsums(
+def optimize_einsums_full(
     model: Union[torch.nn.Module, Callable],
     example_inputs: tuple,
     contract_kwargs: dict = {},
@@ -23,10 +21,11 @@ def optimize_einsums(
 
     All of the restrictions of ``torch.fx`` symbolic tracing apply.
 
-    Applies, in order, three optimizations:
+    Applies, in order, four optimizations:
         1. Scalar accumulation --- use the multilinearity of einsum to collect all constant coefficients and divisors of operands and outputs
         2. Fusing einsums --- gives greater flexibility to (3)
         3. Optimized contraction with ``opt_einsum``.
+        4. Moving constant scalar coefficients through operations they commute with in order to place them on the smallest possible intermediate results
 
     Args:
         model (torch.nn.Module or callable): the model or function to optimize
@@ -39,24 +38,30 @@ def optimize_einsums(
         tracer: fx.Tracer = tracer_class()
         graph: fx.Graph = tracer.trace(model)
         model = tracer.root
+
     # 1. Scalar accumulation
     # without shape information, this just accumulates scalars and moves them to the end of chains of linear operations
     graph = fuse_scalars(graph)
+
     # 2. Fuse any einsums we can
     # This gives opt_einsum the most freedom possible to rearange things
     # Since we already moved scalars to the end of chains of linear operations, any scalars between linear operations should already have been moved
     graph = fuse_einsums(graph, in_place=True)
     out_mod = fx.GraphModule(model, graph)
+
     # 3. Shape propagation
     sp = ShapeProp(out_mod)
     sp.run(*example_inputs)
+
     # 4. Optimize einsums
-    out_mod.graph = optimize_einsums_graph(out_mod.graph, contract_kwargs)
+    out_mod.graph = optimize_einsums(out_mod.graph, contract_kwargs)
     out_mod.recompile()
+
     # 5. Shape prop (again)
     # We need shapes to put the scalars in the best place
     sp = ShapeProp(out_mod)
     sp.run(*example_inputs)
+
     # 6. Final scalar fusion to move scalars
     out_mod.graph = fuse_scalars(out_mod.graph, in_place=True)
     out_mod.recompile()
@@ -64,7 +69,7 @@ def optimize_einsums(
 
 
 # Based on "Proxy Retracing" example in https://pytorch.org/docs/stable/fx.html
-def optimize_einsums_graph(graph: fx.Graph, contract_kwargs: dict = {}) -> fx.Graph:
+def optimize_einsums(graph: fx.Graph, contract_kwargs: dict = {}) -> fx.Graph:
     """Optimize einsums in a ``torch.fx.Graph`` using ``opt_einsum``.
 
     ``graph`` must have shape information such as that populated by ``torch.fx.passes.shape_prop.ShapeProp``.

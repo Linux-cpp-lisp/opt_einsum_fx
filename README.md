@@ -1,9 +1,13 @@
 # opt_einsum_fx
+
+_under development_
+
 Einsum optimization using opt_einsum and PyTorch FX graph rewriting.
 
 This library currently supports:
- - Fusing multiple einsums into one, when possible
+ - Fusing multiple einsums into one
  - Optimizing einsums using the [`opt_einsum`](https://optimized-einsum.readthedocs.io/en/stable/) library
+ - Fusing multiplication and division with scalar constants, including fusing _through_ operations, like einsum, that commute with scalar multiplication.
 
 ## Installation
 
