@@ -36,7 +36,7 @@ def einmatvecmul(a, b, vec):
 
 graph_mod = torch.fx.symbolic_trace(einmatvecmul)
 print("Original code:\n", graph_mod.code)
-graph_opt = opt_einsum_fx.optimize_einsums(
+graph_opt = opt_einsum_fx.optimize_einsums_full(
     model=graph_mod,
     example_inputs=(
         torch.randn(4, 5),
@@ -61,11 +61,12 @@ def forward(self, a, b, vec):
     tensordot_2 = torch.functional.tensordot(tensordot_1, a, dims = ((0,), (1,)));  tensordot_1 = a = None
     return tensordot_2
 ```
-The `optimize_einsums` function has three passes:
+The `optimize_einsums_full` function has four passes:
 
-  1. Einsum fusion: if the only use of the result of an einsum is as an operand to another einsum, it can be fused into the later einsum
-  2. Shape propagation: use [`torch.fx.passes.shape_prop.ShapeProp`](https://github.com/pytorch/pytorch/blob/master/torch/fx/passes/shape_prop.py) and the provided example inputs to determine the shapes of the operands of all einsums
-  3. Einsum optimization: generate optimized contractions for those shapes using `opt_einsum`
+ 1. Scalar accumulation --- use the multilinearity of einsum to fuse all constant coefficients and divisors of operands and outputs
+ 2. Fusing einsums --- gives greater flexibility to (3)
+ 3. Optimized contraction with ``opt_einsum``
+ 4. Moving constant scalar coefficients through operations they commute with in order to place them on the smallest possible intermediate results
 
 ### JIT
 
