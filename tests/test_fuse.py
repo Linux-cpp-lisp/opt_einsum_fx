@@ -98,6 +98,10 @@ def just_scalars(x, y):
     return 3.0 * x
 
 
+def just_many_scalars(x, y):
+    return 3.0 / 3.4 * x / 4.0
+
+
 # In all cases but unfusable, after fusion, the graph should have 5 nodes:
 # two placeholders, one einsum, one mul, and one output
 @pytest.mark.parametrize(
@@ -111,6 +115,7 @@ def just_scalars(x, y):
             9,  # two placeholders, one einsum one mul, one einsum one mul, one getitem, one sum, and one output = 9
         ),
         (just_scalars, 4),
+        (just_many_scalars, 4),
     ],
 )
 def test_scalar_fuse(allclose, func):

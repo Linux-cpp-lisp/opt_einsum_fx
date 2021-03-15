@@ -39,6 +39,17 @@ def unfusable_w_scalars(x, y):
     return torch.einsum("ik,ij->i", z, x) + 1.1 * z[:, 0]
 
 
+def not_einsum(x, y):
+    # Try to trip it up with lots of scalar fusion but no einsums
+    return 3.0 * 2.7 * x.sum() + (4.6 / y.relu().sum())
+
+
+def not_einsum2(x, y):
+    a = x.tanh().relu().sum() - y.sum()
+    b = 3.41 * y.sum().tanh()
+    return a - 6.7 * b
+
+
 @pytest.fixture(
     scope="module",
     params=[
@@ -48,6 +59,8 @@ def unfusable_w_scalars(x, y):
         fusable_w_scalars,
         unfusable,
         unfusable_w_scalars,
+        not_einsum,
+        not_einsum2,
     ],
 )
 def einfunc(request):
@@ -83,7 +96,9 @@ def test_optimize_einsums(einfunc, allclose):
     assert allclose(func_res, func_opt(x, y))
 
 
-def test_fallback(einfunc):
+def test_fallback():
+    # We only bother to test this for one function
+    einfunc = fusable
     # If there is no shape propagation, it should warn
     # and not do anything.
     func_fx = torch.fx.symbolic_trace(einfunc)
