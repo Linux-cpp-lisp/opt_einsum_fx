@@ -143,7 +143,7 @@ SCALAR_COMMUTE_OPS = [
     torch.tensordot,
     torch.functional.tensordot,
     "permute",
-    "reshape",
+    # "reshape",
     "mul",
     "div",
     operator.mul,
@@ -163,6 +163,11 @@ def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
     """Use the multilinearity of einsum to unify and remove constant scalars around einsums."""
     if not in_place:
         graph = copy.deepcopy(graph)
+
+    # Clear any previous state this graph has
+    for node in graph.nodes:
+        if hasattr(node, "in_lin_chain"):
+            delattr(node, "in_lin_chain")
 
     # Find chains of multilinear ops
     seen_nodes = set()
@@ -194,9 +199,12 @@ def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
 
         # If the next user, which is now in node, was seen but is itself in a linear chain, this means we merge them
         # TODO: thoroughly test this
-        if hasattr(node, "in_lin_chain"):
+        if hasattr(node, "in_lin_chain") and len(cur_linear_chain) > 0:
             # Merge
-            linear_chains[node.in_lin_chain].extend(cur_linear_chain)
+            merge_into = node.in_lin_chain
+            for n in cur_linear_chain:
+                n.in_lin_chain = merge_into
+            linear_chains[merge_into].extend(cur_linear_chain)
         else:
             # This is a new chain
             linear_chains.append(cur_linear_chain)
