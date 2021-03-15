@@ -104,6 +104,13 @@ def just_many_scalars(x, y):
     return 3.0 / 3.4 * x / 4.0
 
 
+def in_place(x, y):
+    # This *shouldn't* be fused.
+    a = x.clone()
+    b = a.mul_(4.0)
+    return 3.0 * b
+
+
 def constants(x, y):
     return math.pi * torch.einsum("ij,jk->ik", x, math.e * y / 3) / 2
 
@@ -122,6 +129,7 @@ def constants(x, y):
         ),
         (just_scalars, 4),
         (just_many_scalars, 4),
+        (in_place, 6),
         (constants, 5),
     ],
 )

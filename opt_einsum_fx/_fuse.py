@@ -107,6 +107,9 @@ def fuse_einsums(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
 
 
 # == Scalar fusion ==
+#
+# Note that in general we do not support scalar fusion through in-place operations; it complicates following things through the compute graph too much
+
 
 # TODO: should the accumulation of constants happen in more than double precision?
 def _get_node_and_scalar(node: fx.Node) -> Tuple[fx.Node, Optional[numbers.Number]]:
@@ -123,10 +126,10 @@ def _get_node_and_scalar(node: fx.Node) -> Tuple[fx.Node, Optional[numbers.Numbe
                 return node.args[0], 1.0 / node.args[1]
     elif node.op == "call_method":
         # TODO: this could _technically_ be wrong if the nodes `self` argument is not a (proxy to) a Tensor
-        if node.target == "mul" or node.target == "mul_":
+        if node.target == "mul":
             if isinstance(node.args[1], numbers.Number):
                 return node.args[0], node.args[1]
-        elif node.target == "div" or node.target == "div_":
+        elif node.target == "div":
             if isinstance(node.args[1], numbers.Number):
                 return node.args[0], 1.0 / node.args[1]
     return node, None
