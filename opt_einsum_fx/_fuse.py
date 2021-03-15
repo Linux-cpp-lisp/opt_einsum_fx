@@ -217,7 +217,6 @@ def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
         # Remove scalar nodes
         for node_i in scalar_node_idexes:
             node = lin_chain[node_i]
-            print("scalar node", node)
             new_node, scalar = _get_node_and_scalar(node)
             assert scalar is not None
 

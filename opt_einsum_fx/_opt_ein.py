@@ -58,10 +58,8 @@ def optimize_einsums(
     sp = ShapeProp(out_mod)
     sp.run(*example_inputs)
     # 6. Final scalar fusion to move scalars
-    print("before last scalar", out_mod.graph)
     out_mod.graph = fuse_scalars(out_mod.graph, in_place=True)
     out_mod.recompile()
-    print("after last scalar", out_mod.graph)
     return out_mod
 
 
