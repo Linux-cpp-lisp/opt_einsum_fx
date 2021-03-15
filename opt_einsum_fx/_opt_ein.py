@@ -12,11 +12,11 @@ from ._fuse import fuse_einsums, fuse_scalars, _EINSUM_FUNCS
 
 
 def optimize_einsums_full(
-    model: Union[torch.nn.Module, Callable],
+    model: Union[torch.nn.Module, Callable, fx.Graph],
     example_inputs: tuple,
     contract_kwargs: dict = {},
     tracer_class: type = fx.Tracer,
-) -> torch.nn.Module:
+) -> Union[fx.GraphModule, fx.Graph]:
     """Optimize einsums in ``model`` for ``example_inputs``.
 
     All of the restrictions of ``torch.fx`` symbolic tracing apply.
@@ -28,12 +28,20 @@ def optimize_einsums_full(
         4. Moving constant scalar coefficients through operations they commute with in order to place them on the smallest possible intermediate results
 
     Args:
-        model (torch.nn.Module or callable): the model or function to optimize
+        model (torch.nn.Module or callable or fx.Graph): the model, function, or ``fx.Graph`` to optimize.
         example_inputs (tuple): arguments to ``model`` whose shapes will determine the einsum optimizations.
-        tracer_class (type, optional): the tracer class to use to turn ``model`` into an ``fx.Graph``.
+        tracer_class (type, optional): the tracer class to use to turn ``model`` into an ``fx.Graph`` if it isn't already an ``fx.GraphModule`` or ``fx.Graph``.
+
+    Returns:
+        An optimized ``fx.GraphModule``, or if ``model`` is an ``fx.Graph``, an optimized ``fx.Graph``.
     """
+    output_graph = False
     if isinstance(model, fx.GraphModule):
         graph: fx.Graph = model.graph
+    elif isinstance(model, fx.Graph):
+        graph: fx.Graph = model
+        model = torch.nn.Module()
+        output_graph = True
     else:
         tracer: fx.Tracer = tracer_class()
         graph: fx.Graph = tracer.trace(model)
@@ -64,8 +72,12 @@ def optimize_einsums_full(
 
     # 6. Final scalar fusion to move scalars
     out_mod.graph = fuse_scalars(out_mod.graph, in_place=True)
-    out_mod.recompile()
-    return out_mod
+
+    if output_graph:
+        return out_mod.graph
+    else:
+        out_mod.recompile()
+        return out_mod
 
 
 # Based on "Proxy Retracing" example in https://pytorch.org/docs/stable/fx.html
