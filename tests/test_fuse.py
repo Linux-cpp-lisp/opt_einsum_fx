@@ -94,6 +94,10 @@ def scalar_unfusable(x, y):
     return (2.0 * torch.einsum("ik,ij->i", z, x)) + z[:, 0]
 
 
+def just_scalars(x, y):
+    return 3.0 * x
+
+
 # In all cases but unfusable, after fusion, the graph should have 5 nodes:
 # two placeholders, one einsum, one mul, and one output
 @pytest.mark.parametrize(
@@ -106,12 +110,15 @@ def scalar_unfusable(x, y):
             scalar_unfusable,
             9,  # two placeholders, one einsum one mul, one einsum one mul, one getitem, one sum, and one output = 9
         ),
+        (just_scalars, 4),
     ],
 )
 def test_scalar_fuse(allclose, func):
     func, truth_num_nodes = func
     g = torch.fx.symbolic_trace(func)
+    print("old graph\n", g.graph)
     new_graph = fuse_scalars(g.graph)
+    print("new graph\n", new_graph)
     g.graph = new_graph
     assert len(g.graph.nodes) == truth_num_nodes
     g.recompile()

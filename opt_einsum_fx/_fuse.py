@@ -163,27 +163,19 @@ def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
     # Find chains of multilinear ops
     seen_nodes = set()
     linear_chains = []
-    scalars = []
     for node in graph.nodes:
         if id(node) in seen_nodes:
             continue
 
+        # Determine a linear chain
         cur_linear_chain = []
-        cur_scalar = 1.0
         while (
             id(node) not in seen_nodes
             and getattr(node, "target", None) in SCALAR_COMMUTE_OPS
         ):
             seen_nodes.add(id(node))
             node.in_lin_chain = len(linear_chains)
-            new_node, scalar = _get_node_and_scalar(node)
-            if scalar is not None:
-                cur_scalar *= scalar
-                node.replace_all_uses_with(new_node)
-                graph.erase_node(node)
-                node = new_node
-            else:
-                cur_linear_chain.append(node)
+            cur_linear_chain.append(node)
             # Save the current node to check if its time to break the chain
             old_node = node
             # Continue building the chain regardless, since the merger uses this
@@ -192,26 +184,83 @@ def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
                 # End this chain
                 break
 
-        # TODO: configurable threshold
-        if len(cur_linear_chain) > 1 or cur_scalar != 1.0:
-            # If the next user, which is now in node, was seen but is itself in a linear chain, this means we merge them
-            # TODO: thoroughly test this
-            if hasattr(node, "in_lin_chain"):
-                print("node in chain", node.in_lin_chain)
-                linear_chains[node.in_lin_chain].extend(cur_linear_chain)
-                scalars[node.in_lin_chain] *= cur_scalar
-            else:
-                linear_chains.append(cur_linear_chain)
-                scalars.append(cur_scalar)
+        # If the next user, which is now in node, was seen but is itself in a linear chain, this means we merge them
+        # TODO: thoroughly test this
+        if hasattr(node, "in_lin_chain"):
+            # Merge
+            linear_chains[node.in_lin_chain].extend(cur_linear_chain)
+        else:
+            # This is a new chain
+            linear_chains.append(cur_linear_chain)
+
+    # Accumulate scalars in them
+    scalars = []
+    for lin_chain_i, lin_chain in enumerate(linear_chains):
+        if len(lin_chain) < 2:
+            # There's nothing to do here: either the chain is empty,
+            # or there's only one operation — even if its a scalar multiplication,
+            # theres nothing for us to do with it
+            scalars.append(None)
+            continue
+
+        # Accumulate scalars
+        scalar_node_idexes = []
+        total_scalar = 1.0
+        for node_i, node in enumerate(lin_chain):
+            new_node, scalar = _get_node_and_scalar(node)
+            if scalar is not None:
+                total_scalar *= scalar
+                scalar_node_idexes.append(node_i)
+
+        is_all_scalars = len(scalar_node_idexes) == len(lin_chain)
+
+        # Remove scalar nodes
+        for node_i in scalar_node_idexes:
+            node = lin_chain[node_i]
+            print("scalar node", node)
+            new_node, scalar = _get_node_and_scalar(node)
+            assert scalar is not None
+
+            if is_all_scalars and node_i == len(lin_chain) - 1:
+                # If it's all scalars, we just put the total_scalar into the last operation
+                # and don't save a scalar for later
+                with graph.inserting_after(node):
+                    new_node = graph.call_function(
+                        operator.mul,
+                        (total_scalar, new_node),
+                    )
+                total_scalar = None
+
+            node.replace_all_uses_with(new_node)
+            graph.erase_node(node)
+
+        # Save the scalar for this chain
+        scalars.append(total_scalar)
+        # Remove all of the removed scalar operations from the lin chain
+        # See https://stackoverflow.com/a/11303234/1008938
+        for index in sorted(
+            (scalar_node_idexes[:-1] if is_all_scalars else scalar_node_idexes),
+            reverse=True,
+        ):
+            del lin_chain[index]
+
     del seen_nodes
 
-    print("lin_chains", linear_chains)
-    print("scalars", scalars)
+    # Make sure everything is still OK
+    graph.lint()
 
+    # Now we have chains without scalar operations; we can go through and add back in the scalars in the optimal place
     for lin_chain_i, lin_chain in enumerate(linear_chains):
-        if scalars[lin_chain_i] == 1.0:
+        if (
+            len(lin_chain) == 0
+            or scalars[lin_chain_i] == 1.0
+            or scalars[lin_chain_i] is None
+        ):
+            # Nothing to do with an empty chain
             # No reason to add back a scalar that does nothing
+            # None signals don't process from above
             continue
+
         # Find the smallest argument or the output
         smallest_node_i = None
         smallest_arg_i = None
@@ -230,7 +279,7 @@ def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
             and prod(lin_chain[-1].shape) < smallest_size
         ):
             # The output is the smallest, put it there
-            # OR if there was no smallest argument, put it on the end of the chain
+            # OR there was no smallest argument, put it on the end of the chain
             with graph.inserting_after(lin_chain[-1]):
                 new_node = graph.call_method("mul", tuple())  # placeholder
                 lin_chain[-1].replace_all_uses_with(new_node)
