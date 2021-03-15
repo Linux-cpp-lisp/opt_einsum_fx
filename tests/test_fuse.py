@@ -1,5 +1,7 @@
 import pytest
 
+import math
+
 import torch
 import torch.fx
 
@@ -102,6 +104,10 @@ def just_many_scalars(x, y):
     return 3.0 / 3.4 * x / 4.0
 
 
+def constants(x, y):
+    return math.pi * torch.einsum("ij,jk->ik", x, math.e * y / 3) / 2
+
+
 # In all cases but unfusable, after fusion, the graph should have 5 nodes:
 # two placeholders, one einsum, one mul, and one output
 @pytest.mark.parametrize(
@@ -116,6 +122,7 @@ def just_many_scalars(x, y):
         ),
         (just_scalars, 4),
         (just_many_scalars, 4),
+        (constants, 5),
     ],
 )
 def test_scalar_fuse(allclose, func):
