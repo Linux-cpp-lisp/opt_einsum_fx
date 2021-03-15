@@ -109,6 +109,7 @@ def fuse_einsums(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
 # == Scalar fusion ==
 #
 # Note that in general we do not support scalar fusion through in-place operations; it complicates following things through the compute graph too much
+# TODO: ^ ???
 
 
 # TODO: should the accumulation of constants happen in more than double precision?
