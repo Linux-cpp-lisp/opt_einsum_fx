@@ -296,7 +296,7 @@ def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
             # The output is the smallest, put it there
             # OR there was no smallest argument, put it on the end of the chain
             with graph.inserting_after(lin_chain[-1]):
-                new_node = graph.call_method("mul", tuple())  # placeholder
+                new_node = graph.call_function(operator.mul, tuple())  # placeholder
                 lin_chain[-1].replace_all_uses_with(new_node)
                 new_node.args = (lin_chain[-1], scalars[lin_chain_i])
         else:
