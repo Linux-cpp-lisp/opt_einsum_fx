@@ -1,11 +1,12 @@
 import pytest
 
 import math
+import operator
 
 import torch
 import torch.fx
 
-from opt_einsum_fx import fuse_einsums, fuse_scalars
+from opt_einsum_fx import fuse_einsums, fuse_scalars, optimize_einsums_full
 
 
 def test_einsum_fuse(allclose):
@@ -151,4 +152,22 @@ def test_scalar_fuse(allclose, func):
     x, y = torch.randn(3, 4), torch.randn(4, 5)
     out_truth = func(x, y)
     out_fused = g(x, y)
+    assert allclose(out_fused, out_truth)
+
+
+def test_scalar_positioning(allclose):
+    def f(x, y, z):
+        return 0.784 * torch.einsum("ij,jk,kl->il", x, y, z)
+
+    x, y, z = torch.randn(2, 100), torch.randn(100, 2), torch.randn(2, 100)
+
+    # note that the smallest here is y
+    g = torch.fx.symbolic_trace(f)
+    print("old graph\n", g.graph)
+    g = optimize_einsums_full(g, (x, y, z))
+    print("new graph\n", g.graph)
+    # optimal placement is on the 2x2 intermediate
+    assert list(g.graph.nodes)[4].target == operator.mul
+    out_truth = f(x, y, z)
+    out_fused = g(x, y, z)
     assert allclose(out_fused, out_truth)
