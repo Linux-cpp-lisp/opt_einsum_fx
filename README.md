@@ -13,7 +13,7 @@ This library currently supports:
 ## Installation
 
 ```bash
-$ pip install 
+$ pip install git+https://github.com/Linux-cpp-lisp/opt_einsum_fx.git
 ```
 You can run the tests with
 ```bash
