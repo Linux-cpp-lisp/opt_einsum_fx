@@ -76,7 +76,7 @@ The `optimize_einsums_full` function has four passes:
  2. Fusing einsums --- gives greater flexibility to (3)
  3. Optimized contraction with ``opt_einsum``
  4. Moving constant scalar coefficients through operations they commute with in order to place them on the smallest possible intermediate results
-
+ 
 ### JIT
 
 Currently, pure Python and TorchScript have different call signatures for `torch.tensordot` and `torch.permute`, both of which can appear in optimized einsums:
