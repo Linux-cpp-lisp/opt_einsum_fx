@@ -40,7 +40,13 @@ def _mulgrad(node: fx.Node, wrt: int, grad_out: fx.Node):
 
 # Mapping from target function to function of signature
 # f(node: fx.Node, wrt: int, grad_out: fx.Node) -> fx.Node
-_GRAD_FUNCS = {torch.einsum: _eingrad, operator.mul: _mulgrad, "mul": _mulgrad}
+_GRAD_FUNCS = {
+    torch.einsum: _eingrad,
+    operator.mul: _mulgrad,
+    "mul": _mulgrad,
+    operator.truediv: _mulgrad,
+    "div": _mulgrad,
+}
 
 
 def _accumulate(n1: Optional[fx.Node], n2: Optional[fx.Node]) -> fx.Node:

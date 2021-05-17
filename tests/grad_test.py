@@ -12,6 +12,7 @@ from opt_einsum_fx.grad import grad
     "func,args",
     [
         (lambda x: 2.0 * x, [torch.randn(7, 3)]),
+        (lambda x: x / 4.77, [torch.randn(2, 3)]),
         (
             lambda x, y: torch.einsum("ij,jk->ik", x, y),
             [torch.randn(4, 3), torch.randn(3, 6)],
