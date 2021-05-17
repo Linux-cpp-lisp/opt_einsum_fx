@@ -12,8 +12,14 @@ This library currently supports:
 
 ## Installation
 
+Source code for releases can be found at https://github.com/Linux-cpp-lisp/opt_einsum_fx/releases. Otherwise, to get the latest code, run:
+
 ```bash
 $ git clone https://github.com/Linux-cpp-lisp/opt_einsum_fx.git
+```
+
+After downloading source code, run:
+```bash
 $ cd opt_einsum_fx/
 $ pip install .
 ```
