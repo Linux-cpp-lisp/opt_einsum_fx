@@ -146,11 +146,12 @@ def constants(x, y):
         (unused, 6),
     ],
 )
-def test_scalar_fuse(allclose, func):
+@pytest.mark.parametrize("in_place_muls", [False, True])
+def test_scalar_fuse(allclose, func, in_place_muls):
     func, truth_num_nodes = func
     g = torch.fx.symbolic_trace(func)
     print("old graph\n", g.graph)
-    new_graph = fuse_scalars(g.graph)
+    new_graph = fuse_scalars(g.graph, in_place_muls=in_place_muls)
     print("new graph\n", new_graph)
     g.graph = new_graph
     assert len(g.graph.nodes) == truth_num_nodes
@@ -161,7 +162,8 @@ def test_scalar_fuse(allclose, func):
     assert allclose(out_fused, out_truth)
 
 
-def test_scalar_positioning(allclose):
+@pytest.mark.parametrize("in_place_muls", [False, True])
+def test_scalar_positioning(allclose, in_place_muls):
     def f(x, y, z):
         return 0.784 * torch.einsum("ij,jk,kl->il", x, y, z)
 
@@ -170,10 +172,10 @@ def test_scalar_positioning(allclose):
     # note that the smallest here is y
     g = torch.fx.symbolic_trace(f)
     print("old graph\n", g.graph)
-    g = optimize_einsums_full(g, (x, y, z))
+    g = optimize_einsums_full(g, (x, y, z), in_place_muls=in_place_muls)
     print("new graph\n", g.graph)
     # optimal placement is on the 2x2 intermediate
-    assert list(g.graph.nodes)[4].target == operator.mul
+    assert list(g.graph.nodes)[4].target == ("mul_" if in_place_muls else "mul")
     out_truth = f(x, y, z)
     out_fused = g(x, y, z)
     assert allclose(out_fused, out_truth)

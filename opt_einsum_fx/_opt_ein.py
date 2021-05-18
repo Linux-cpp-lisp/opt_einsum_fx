@@ -16,6 +16,7 @@ def optimize_einsums_full(
     example_inputs: tuple,
     contract_kwargs: dict = {},
     tracer_class: type = fx.Tracer,
+    in_place_muls: bool = False,
 ) -> Union[fx.GraphModule, fx.Graph]:
     """Optimize einsums in ``model`` for ``example_inputs``.
 
@@ -30,7 +31,9 @@ def optimize_einsums_full(
     Args:
         model (torch.nn.Module or callable or fx.Graph): the model, function, or ``fx.Graph`` to optimize.
         example_inputs (tuple): arguments to ``model`` whose shapes will determine the einsum optimizations.
+        contract_kwargs (dict): options for ``opt_einsum``
         tracer_class (type, optional): the tracer class to use to turn ``model`` into an ``fx.Graph`` if it isn't already an ``fx.GraphModule`` or ``fx.Graph``.
+        in_place_muls (bool): whether to apply fused scalars using in-place multiplication when possible. See `fuse_scalars`.
 
     Returns:
         An optimized ``fx.GraphModule``, or if ``model`` is an ``fx.Graph``, an optimized ``fx.Graph``.
@@ -71,7 +74,9 @@ def optimize_einsums_full(
     sp.run(*example_inputs)
 
     # 6. Final scalar fusion to move scalars
-    out_mod.graph = fuse_scalars(out_mod.graph, in_place=True)
+    out_mod.graph = fuse_scalars(
+        out_mod.graph, in_place=True, in_place_muls=in_place_muls
+    )
 
     if output_graph:
         return out_mod.graph

@@ -88,11 +88,12 @@ def test_optimize_einsums(einfunc, allclose):
     assert allclose(func_opt_res, func_fx_res)
 
 
-def test_optimize_einsums_full(einfunc, allclose):
+@pytest.mark.parametrize("in_place_muls", [False, True])
+def test_optimize_einsums_full(einfunc, in_place_muls, allclose):
     x = torch.randn(3, 4)
     y = torch.randn(4, 5)
     func_res = einfunc(x, y)
-    func_opt = optimize_einsums_full(einfunc, (x, y))
+    func_opt = optimize_einsums_full(einfunc, (x, y), in_place_muls=in_place_muls)
     assert allclose(func_res, func_opt(x, y))
 
 
@@ -112,11 +113,12 @@ def test_fallback():
     assert old_code == func_fx.code
 
 
-def test_torchscript(einfunc, allclose):
+@pytest.mark.parametrize("in_place_muls", [False, True])
+def test_torchscript(einfunc, in_place_muls, allclose):
     x = torch.randn(3, 4)
     y = torch.randn(4, 5)
     func_res = einfunc(x, y)
-    mod_opt = optimize_einsums_full(einfunc, (x, y))
+    mod_opt = optimize_einsums_full(einfunc, (x, y), in_place_muls=in_place_muls)
     mod_opt = jitable(mod_opt)
     mod_opt = torch.jit.script(mod_opt)
     func_opt_res = mod_opt(x, y)

@@ -159,8 +159,16 @@ def prod(x):
     return out
 
 
-def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
-    """Use the multilinearity of einsum to unify and remove constant scalars around einsums."""
+def fuse_scalars(
+    graph: fx.Graph, in_place: bool = False, in_place_muls: bool = False
+) -> fx.Graph:
+    """Use the multilinearity of einsum to unify and remove constant scalars around einsums.
+
+    Args:
+        graph (fx.Graph): the graph to process
+        in_place (bool): whether to process it in place
+        in_place_muls (bool): whether to use ``mul_`` (in-place) or ``mul`` (not) when adding the final fused constants to the graph.
+    """
     if not in_place:
         graph = copy.deepcopy(graph)
 
@@ -295,23 +303,43 @@ def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
         ):
             # The output is the smallest, put it there
             # OR there was no smallest argument, put it on the end of the chain
-            with graph.inserting_after(lin_chain[-1]):
-                new_node = graph.call_function(operator.mul, tuple())  # placeholder
-                lin_chain[-1].replace_all_uses_with(new_node)
-                new_node.args = (lin_chain[-1], scalars[lin_chain_i])
+            node = lin_chain[-1]
+            with graph.inserting_after(node):
+                new_node = graph.call_method(
+                    "mul_"
+                    if (
+                        in_place_muls
+                        and len(node.users) < 2
+                        # we don't want to mutate arguments in-place
+                        and node.op != "placeholder"
+                    )
+                    else "mul",
+                    tuple(),
+                )  # placeholder for real arguments after replacing
+                node.replace_all_uses_with(new_node)
+                new_node.args = (node, scalars[lin_chain_i])
         else:
             # The smallest was someone's arg, so we replace that with a scalar multiplication:
-            with graph.inserting_before(lin_chain[smallest_node_i]):
-                new_arg = graph.call_function(
-                    operator.mul,
+            arg_of_node = lin_chain[smallest_node_i]
+            node = arg_of_node.args[smallest_arg_i]
+            with graph.inserting_before(arg_of_node):
+                new_arg = graph.call_method(
+                    "mul_"
+                    if (
+                        in_place_muls
+                        and len(node.users) < 2
+                        # we don't want to mutate arguments in-place
+                        and node.op != "placeholder"
+                    )
+                    else "mul",
                     (
-                        lin_chain[smallest_node_i].args[smallest_arg_i],
+                        node,
                         scalars[lin_chain_i],
                     ),
                 )
-                new_args = list(lin_chain[smallest_node_i].args)
+                new_args = list(arg_of_node.args)
                 new_args[smallest_arg_i] = new_arg
-                lin_chain[smallest_node_i].args = tuple(new_args)
+                arg_of_node.args = tuple(new_args)
 
     graph.lint()
     return graph
