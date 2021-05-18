@@ -22,8 +22,12 @@ def deduplicate(
 ) -> int:
     """Deduplicate a graph in-place.
 
-    Returns
-    -------
+    Args:
+        graph: the graph
+        exclude_functions: list of functions to ignore for deduplication
+        exclude_methods: list of method names to ignore for deduplication
+
+    Returns:
         How many nodes were removed.
     """
     graph.lint()
