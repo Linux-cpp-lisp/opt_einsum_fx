@@ -21,6 +21,7 @@ def deduplicate(
     exclude_methods: Sequence[str] = [],
 ) -> fx.Graph:
     """Deduplicate a graph in-place"""
+    graph.lint()
     exclude_functions = set(exclude_functions)
     exclude_methods = set(exclude_methods)
     seen = []
@@ -47,3 +48,20 @@ def deduplicate(
             seen.append(node)
     graph.lint()
     return graph
+
+
+# based on unreleased code in PyTorch:
+# https://github.com/pytorch/pytorch/blob/master/torch/fx/graph.py#L1073
+def eliminate_dead_code(graph: fx.Graph, impure_targets=[]) -> None:
+    graph.lint()  # ensure topological sort
+    for node in reversed(graph.nodes):
+        if (
+            node.op in ("call_function", "call_method", "get_attr")
+            and len(node.users) == 0
+        ):
+            if node.target in impure_targets:
+                continue
+            if isinstance(node.target, str) and node.target.endswith("_"):
+                # mul_, etc.
+                continue
+            graph.erase_node(node)
