@@ -1,4 +1,4 @@
-from typing import Optional, List
+from typing import Optional, List, Union
 import operator
 import numbers
 
@@ -14,11 +14,28 @@ def _eingrad(einnode: fx.Node, wrt: int, grad_out: fx.Node):
     operands = list(einnode.args[1:])
     op_labels, grad_out_labels = einstr.split("->")
     op_labels = op_labels.split(",")
+
+    # from https://github.com/HIPS/autograd/blob/master/autograd/numpy/numpy_vjps.py#L601
+    # > subscripts that only appear in subs_wrt (and not in other subscript lists
+    # > or in the output) are implicitly being summed out, as if contracted
+    # > against a tensor of ones. we make that tensor of ones explicit to handle
+    # > the necessary vjp broadcasting inside einsum.
+    # So we do similarly:
     new_labels = (
         [grad_out_labels] + op_labels[:wrt] + op_labels[wrt + 1 :]
     )  # without wrt
-    new_einstr = ",".join(new_labels) + "->" + op_labels[wrt]
     new_operands = [grad_out] + operands[:wrt] + operands[wrt + 1 :]
+    naked_labels = list(set(op_labels[wrt]) - set("".join(new_labels)))
+    if len(naked_labels) > 0:
+        wrt_shape = fx.Proxy(operands[wrt]).shape
+        naked_shape = tuple(
+            wrt_shape[op_labels[wrt].index(label)].node for label in naked_labels
+        )
+        naked_ones = einnode.graph.call_function(torch.ones, args=(naked_shape,))
+        new_labels.append("".join(naked_labels))
+        new_operands.append(naked_ones)
+
+    new_einstr = ",".join(new_labels) + "->" + op_labels[wrt]
     return einnode.graph.call_function(
         torch.einsum, args=(new_einstr,) + tuple(new_operands), type_expr=torch.Tensor
     )
@@ -38,6 +55,35 @@ def _mulgrad(node: fx.Node, wrt: int, grad_out: fx.Node):
     return node.graph.call_function(operator.mul, args=(other, grad_out))
 
 
+def _prod(x):
+    """Compute the product of a sequence."""
+    out = 1
+    for a in x:
+        out *= a
+    return out
+
+
+def _reshape_grad(node: fx.Node, wrt: int, grad_out: fx.Node):
+    """
+    Only supports fully static shapes or shapes with one leading -1 batch dimension.
+    """
+    if wrt != 0:
+        return None
+    assert node.target in ("reshape", "view")
+    orig = node.args[0]
+    assert isinstance(orig, fx.Node)
+    newshape = node.args[1:]
+    oldshape = getattr(orig, "shape", None)
+    if oldshape is None:
+        raise RuntimeError("Differentiating reshape requires static shape information")
+    if -1 in newshape:
+        assert -1 not in newshape[1:]
+        assert _prod(newshape[1:]) == _prod(oldshape[1:])
+        # make the first dim flexible
+        oldshape = (-1,) + oldshape[1:]
+    return node.graph.call_method(node.target, args=(grad_out, oldshape))
+
+
 # Mapping from target function to function of signature
 # f(node: fx.Node, wrt: int, grad_out: fx.Node) -> fx.Node
 _GRAD_FUNCS = {
@@ -46,6 +92,8 @@ _GRAD_FUNCS = {
     "mul": _mulgrad,
     operator.truediv: _mulgrad,
     "div": _mulgrad,
+    "reshape": _reshape_grad,
+    "view": _reshape_grad,
 }
 
 
@@ -59,14 +107,27 @@ def _accumulate(n1: Optional[fx.Node], n2: Optional[fx.Node]) -> fx.Node:
 
 
 def grad(out: fx.Node, grad_out: fx.Node, wrt: fx.Node) -> Optional[fx.Node]:
+    assert isinstance(out, fx.Node)
+    assert isinstance(wrt, fx.Node)
+    out.graph.lint()
+    # requires_grad
+    requires_grad = {wrt}
+    for node in wrt.graph.nodes:
+        if node in requires_grad:
+            requires_grad.update(node.users)
+
     # backpropagate
     out.grad = grad_out
-    has_grad = {out}
 
     node = out
     while True:
         for arg_i, arg in enumerate(node.args):
             if not isinstance(arg, fx.Node):
+                continue
+            if arg not in requires_grad:
+                continue
+            if arg.type is not None and arg.type != torch.Tensor:
+                # Assume like torchscript no type => tensor
                 continue
             grad_func = _GRAD_FUNCS.get(node.target, None)
             if grad_func is None:
@@ -74,9 +135,10 @@ def grad(out: fx.Node, grad_out: fx.Node, wrt: fx.Node) -> Optional[fx.Node]:
             arg.grad = _accumulate(
                 getattr(arg, "grad", None), grad_func(node, arg_i, node.grad)
             )
-            has_grad.add(arg)
         while True:
             node = node.prev
+            if node == wrt:
+                break
             if getattr(node, "grad", None) is not None:
                 break
         if node == wrt:
@@ -85,8 +147,9 @@ def grad(out: fx.Node, grad_out: fx.Node, wrt: fx.Node) -> Optional[fx.Node]:
     final_grad = wrt.grad
 
     # clear state
-    for node in has_grad:
-        del node.grad
+    for node in requires_grad:
+        if hasattr(node, "grad"):
+            del node.grad
 
     out.graph.lint()
 
