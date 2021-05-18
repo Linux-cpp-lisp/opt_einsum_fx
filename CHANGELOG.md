@@ -7,5 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Most recent change on the bottom.
 
 ## [Unreleased]
+### Fixed
+- `jitable` no longer makes some FX nodes' `.args` lists (technically not allowed) instead of tuples
 
 ## [0.1.0] - 2021-05-17
