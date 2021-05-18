@@ -103,6 +103,11 @@ def scalar_unfusable(x, y):
     return (2.0 * torch.einsum("ik,ij->i", z, x)) + z[:, 0]
 
 
+def cant_inplace(x, y):
+    # make a big output so out isn't the smallest, but out is the smallest in-place safe
+    return 2.7 * torch.einsum("ij,mn->ijmn", x, y)
+
+
 def just_scalars(x, y):
     return 3.0 * x
 
@@ -144,6 +149,7 @@ def constants(x, y):
         (in_place, 6),
         (constants, 5),
         (unused, 6),
+        (cant_inplace, 5),
     ],
 )
 @pytest.mark.parametrize("in_place_muls", [False, True])
@@ -157,8 +163,13 @@ def test_scalar_fuse(allclose, func, in_place_muls):
     assert len(g.graph.nodes) == truth_num_nodes
     g.recompile()
     x, y = torch.randn(3, 4), torch.randn(4, 5)
+    xorig, yorig = x.clone(), y.clone()
     out_truth = func(x, y)
     out_fused = g(x, y)
+    # Make sure it didn't mutate anything
+    assert torch.all(x == xorig)
+    assert torch.all(y == yorig)
+    # Check results
     assert allclose(out_fused, out_truth)
 
 

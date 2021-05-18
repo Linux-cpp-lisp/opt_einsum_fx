@@ -92,9 +92,13 @@ def test_optimize_einsums(einfunc, allclose):
 def test_optimize_einsums_full(einfunc, in_place_muls, allclose):
     x = torch.randn(3, 4)
     y = torch.randn(4, 5)
+    xorig, yorig = x.clone(), y.clone()
     func_res = einfunc(x, y)
     func_opt = optimize_einsums_full(einfunc, (x, y), in_place_muls=in_place_muls)
-    assert allclose(func_res, func_opt(x, y))
+    res_opt = func_opt(x, y)
+    assert torch.all(x == xorig)
+    assert torch.all(y == yorig)
+    assert allclose(func_res, res_opt)
 
 
 def test_fallback():

@@ -151,6 +151,15 @@ SCALAR_COMMUTE_OPS = [
 ]
 
 
+# These always return new tensors:
+MUTABLE_SAFE = [
+    torch.einsum,
+    torch.functional.einsum,
+    torch.tensordot,
+    torch.functional.tensordot,
+]
+
+
 def prod(x):
     """Compute the product of a sequence."""
     out = 1
@@ -288,13 +297,29 @@ def fuse_scalars(
         smallest_node_i = None
         smallest_arg_i = None
         smallest_size = float("inf")
-        for node_i, node in enumerate(lin_chain):
-            for arg_i, arg in enumerate(node.args):
-                if hasattr(arg, "shape"):
-                    if prod(arg.shape) < smallest_size:
-                        smallest_node_i = node_i
-                        smallest_arg_i = arg_i
-                        smallest_size = prod(arg.shape)
+        this_in_place = in_place_muls
+        # First check for an in-place option
+        if in_place_muls:
+            for node_i, node in enumerate(lin_chain):
+                for arg_i, arg in enumerate(node.args):
+                    if (
+                        hasattr(arg, "shape")
+                        and getattr(arg, "target", None) in MUTABLE_SAFE
+                    ):
+                        if prod(arg.shape) < smallest_size:
+                            smallest_node_i = node_i
+                            smallest_arg_i = arg_i
+                            smallest_size = prod(arg.shape)
+        # If didn't find anything, do a general case
+        if smallest_node_i is None:
+            this_in_place = False
+            for node_i, node in enumerate(lin_chain):
+                for arg_i, arg in enumerate(node.args):
+                    if hasattr(arg, "shape"):
+                        if prod(arg.shape) < smallest_size:
+                            smallest_node_i = node_i
+                            smallest_arg_i = arg_i
+                            smallest_size = prod(arg.shape)
 
         # Put the accumulated scalar on a node
         if (smallest_node_i is None) or (
@@ -307,12 +332,7 @@ def fuse_scalars(
             with graph.inserting_after(node):
                 new_node = graph.call_method(
                     "mul_"
-                    if (
-                        in_place_muls
-                        and len(node.users) < 2
-                        # we don't want to mutate arguments in-place
-                        and node.op != "placeholder"
-                    )
+                    if (in_place_muls and node.target in MUTABLE_SAFE)
                     else "mul",
                     tuple(),
                 )  # placeholder for real arguments after replacing
@@ -326,10 +346,10 @@ def fuse_scalars(
                 new_arg = graph.call_method(
                     "mul_"
                     if (
-                        in_place_muls
+                        # was this selected as OK for mutation earlier?
+                        this_in_place
+                        # ...and is it not used anywhere else?
                         and len(node.users) < 2
-                        # we don't want to mutate arguments in-place
-                        and node.op != "placeholder"
                     )
                     else "mul",
                     (
