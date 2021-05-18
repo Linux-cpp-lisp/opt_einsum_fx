@@ -64,6 +64,7 @@ def deduplicate(
 # based on unreleased code in PyTorch:
 # https://github.com/pytorch/pytorch/blob/master/torch/fx/graph.py#L1073
 def eliminate_dead_code(graph: fx.Graph, impure_targets=[]) -> None:
+    """Eliminate dead code in-place."""
     graph.lint()  # ensure topological sort
     for node in reversed(graph.nodes):
         if (

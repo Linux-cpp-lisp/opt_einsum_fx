@@ -24,5 +24,6 @@ def test_dedup(n_duplicates: int):
     g.output(out)
     # dedup
     n_nodes_orig = len(g.nodes)
-    g = deduplicate(g)
+    n_removed = deduplicate(g)
     assert len(g.nodes) == n_nodes_orig - n_duplicates
+    assert n_removed == n_duplicates
