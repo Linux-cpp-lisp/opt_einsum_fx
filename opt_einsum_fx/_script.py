@@ -28,7 +28,7 @@ def jitable(obj: Union[fx.GraphModule, fx.Graph]) -> Union[fx.GraphModule, fx.Gr
                     assert len(args) == 2  # tensors 1 and 2
                     args.append(list(dim_self))
                     args.append(list(dim_other))
-                    node.args = args
+                    node.args = tuple(args)
                     node.kwargs = kwargs
         elif node.op == "call_method":
             if node.target == "permute":
