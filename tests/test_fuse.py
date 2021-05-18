@@ -1,12 +1,18 @@
 import pytest
 
 import math
+import copy
 import operator
 
 import torch
 import torch.fx
 
-from opt_einsum_fx import fuse_einsums, fuse_scalars, optimize_einsums_full
+from opt_einsum_fx import (
+    fuse_einsums,
+    fuse_scalars,
+    fuse_reshapes,
+    optimize_einsums_full,
+)
 
 
 def test_einsum_fuse(allclose):
@@ -171,3 +177,20 @@ def test_scalar_positioning(allclose):
     out_truth = f(x, y, z)
     out_fused = g(x, y, z)
     assert allclose(out_fused, out_truth)
+
+
+def test_reshape_fuse(allclose):
+    def func(x):
+        y = x.reshape(-1, 2, 3)
+        z = y.reshape(-1, 6)
+        return 3.14 * z
+
+    graphmod = torch.fx.symbolic_trace(func)
+    orig_num_nodes = len(graphmod.graph.nodes)
+    gmod_fuse = copy.deepcopy(graphmod)
+    fuse_reshapes(gmod_fuse.graph, in_place=True)
+    gmod_fuse.recompile()
+    new_num_nodes = len(gmod_fuse.graph.nodes)
+    assert new_num_nodes == orig_num_nodes - 1
+    inp = torch.randn(1, 4, 2, 6)
+    assert allclose(graphmod(inp), gmod_fuse(inp))

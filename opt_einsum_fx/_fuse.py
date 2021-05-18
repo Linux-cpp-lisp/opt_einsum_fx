@@ -315,3 +315,23 @@ def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
 
     graph.lint()
     return graph
+
+
+# == .reshape fusion ==
+
+
+def fuse_reshapes(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
+    """Remove redundant reshapes"""
+    reshape_targets = ("reshape", "view")
+    if not in_place:
+        graph = copy.deepcopy(graph)
+    graph.lint()
+    for node in graph.nodes:
+        if node.target in reshape_targets:
+            if len(node.users) == 1:
+                user = list(node.users)[0]
+                if user.target in reshape_targets:
+                    user.args = (node.args[0],) + user.args[1:]
+                    graph.erase_node(node)
+    graph.lint()
+    return graph
