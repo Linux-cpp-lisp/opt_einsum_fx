@@ -19,12 +19,18 @@ def deduplicate(
     graph: fx.Graph,
     exclude_functions: Sequence[Callable] = [],
     exclude_methods: Sequence[str] = [],
-) -> fx.Graph:
-    """Deduplicate a graph in-place"""
+) -> int:
+    """Deduplicate a graph in-place.
+
+    Returns
+    -------
+        How many nodes were removed.
+    """
     graph.lint()
     exclude_functions = set(exclude_functions)
     exclude_methods = set(exclude_methods)
     seen = []
+    n_removed = 0
     for node in graph.nodes:
         if node.op == "call_function":
             if node.target in exclude_functions:
@@ -43,11 +49,12 @@ def deduplicate(
                 node.replace_all_uses_with(seen_node)
                 graph.erase_node(node)
                 replaced = True
+                n_removed += 1
                 break
         if not replaced:
             seen.append(node)
     graph.lint()
-    return graph
+    return n_removed
 
 
 # based on unreleased code in PyTorch:
