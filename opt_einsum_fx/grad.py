@@ -27,11 +27,16 @@ def _eingrad(einnode: fx.Node, wrt: int, grad_out: fx.Node):
     new_operands = [grad_out] + operands[:wrt] + operands[wrt + 1 :]
     naked_labels = list(set(op_labels[wrt]) - set("".join(new_labels)))
     if len(naked_labels) > 0:
-        wrt_shape = fx.Proxy(operands[wrt]).shape
+        wrt_proxy = fx.Proxy(operands[wrt])
+        wrt_shape = wrt_proxy.shape
         naked_shape = tuple(
             wrt_shape[op_labels[wrt].index(label)].node for label in naked_labels
         )
-        naked_ones = einnode.graph.call_function(torch.ones, args=(naked_shape,))
+        naked_ones = einnode.graph.call_function(
+            torch.ones,
+            args=(naked_shape,),
+            kwargs={"device": wrt_proxy.device.node, "dtype": wrt_proxy.dtype.node},
+        )
         new_labels.append("".join(naked_labels))
         new_operands.append(naked_ones)
 
