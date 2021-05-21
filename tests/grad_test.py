@@ -5,8 +5,8 @@ import operator
 
 import torch
 from torch import fx
-from torch.fx.passes.shape_prop import ShapeProp
 
+from opt_einsum_fx.fx_utils import copy_with_attributes, find_in_graph_copy
 from opt_einsum_fx.grad import grad
 
 
@@ -58,30 +58,37 @@ def test_grad_numeric(func, args):
         grad_module = fx.GraphModule({}, grad_graph)
         grad_fx = grad_module(*args)
 
+        assert true_grad.shape == grad_fx.shape
         assert torch.allclose(true_grad, grad_fx)
 
 
-def test_reshape():
+@pytest.mark.parametrize("do_copy", [True, False])
+def test_reshape(do_copy):
     # make a graph
     graph: fx.Graph = fx.Graph()
-    x = fx.Proxy(graph.placeholder("x"))
-    xshape = x.shape[:-1]
-    x = x.reshape(-1, 13)  # 13 is the fixed last dimension
-    out = 2.0 * x
-    out = out.reshape(xshape + (13,))
+    x = graph.placeholder("x")
+    x2 = graph.call_method("reshape", args=(x, (-1, 8, 2, 2)))
+    x2.in_shape = (-1, 32)
+    out = graph.call_function(operator.mul, args=(2.0, x2))
+    out = graph.call_method("reshape", args=(out, (-1, 2, 16)))
+    out.in_shape = (-1, 8, 2, 2)
+    xshape = graph.call_function(getattr, args=(x, "shape"))
     # test grad
-    gmod = fx.GraphModule({}, graph)
-    sp = ShapeProp(gmod)
-    x_real = torch.randn(17, 13)
-    sp.run(x_real)
+    x_real = torch.randn(17, 32)
+
+    if do_copy:
+        graph = copy_with_attributes(graph, attributes=["in_shape"])
+        x, out, xshape = find_in_graph_copy(graph, [x, out, xshape])
+
+    xshape = fx.Proxy(xshape)
     grad_out_node = graph.call_function(
         torch.ones,
-        args=((xshape + (13,)).node,),
+        args=((xshape[0].node, 2, 16),),
         kwargs={"dtype": torch.get_default_dtype()},
     )
-    grad_node = grad(out.node, grad_out_node, x.node)
+    grad_node = grad(out, grad_out_node, x)
     graph.output(grad_node, torch.Tensor)
-    gmod.recompile()
+    gmod = fx.GraphModule({}, graph)
     grad_pred = gmod(x_real)
     assert torch.allclose(grad_pred, torch.as_tensor(2.0))
     assert grad_pred.shape == x_real.shape

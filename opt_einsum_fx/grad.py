@@ -70,23 +70,31 @@ def _prod(x):
 
 def _reshape_grad(node: fx.Node, wrt: int, grad_out: fx.Node):
     """
-    Only supports fully static shapes or shapes with one leading -1 batch dimension.
+    The node must have `in_shape` set.
     """
     if wrt != 0:
         return None
     assert node.target in ("reshape", "view")
     orig = node.args[0]
     assert isinstance(orig, fx.Node)
-    newshape = node.args[1:]
-    oldshape = getattr(orig, "shape", None)
-    if oldshape is None:
-        raise RuntimeError("Differentiating reshape requires static shape information")
-    if -1 in newshape:
-        assert -1 not in newshape[1:]
-        assert _prod(newshape[1:]) == _prod(oldshape[1:])
-        # make the first dim flexible
-        oldshape = (-1,) + oldshape[1:]
-    return node.graph.call_method(node.target, args=(grad_out, oldshape))
+    shape = node.args[1:]
+    if len(shape) == 1 and isinstance(shape[0], tuple):
+        shape = shape[0]
+    in_shape = getattr(node, "in_shape", None)
+    if in_shape is None:
+        raise RuntimeError(
+            "Differentiating reshape requires static input shape information in `in_shape`."
+        )
+    assert isinstance(in_shape, tuple)
+    assert _prod(e for e in in_shape if e != -1) == _prod(e for e in shape if e != -1)
+    return node.graph.call_method(node.target, args=(grad_out, in_shape))
+
+
+def _mmgrad(node: fx.Node, wrt: int, grad_out: fx.Node):
+    assert wrt == 1
+    m = node.args[0]
+    mt = node.graph.call_method("transpose", args=(m,))
+    return node.graph.call_function(torch.mm, args=(mt, grad_out))
 
 
 # Mapping from target function to function of signature
@@ -99,6 +107,7 @@ _GRAD_FUNCS = {
     "div": _mulgrad,
     "reshape": _reshape_grad,
     "view": _reshape_grad,
+    torch.mm: _mmgrad,
 }
 
 

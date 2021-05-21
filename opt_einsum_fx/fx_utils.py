@@ -1,8 +1,44 @@
-from typing import Sequence, Callable
-import operator
+from typing import Sequence, Callable, List, Union
+import copy
 
-import torch
+import torch  # noqa
 from torch import fx
+
+
+def copy_with_attributes(graph: fx.Graph, attributes: Sequence[str] = []) -> fx.Graph:
+    new_graph = copy.deepcopy(graph)
+    props = {}
+    for node in graph.nodes:
+        this_attrs = {}
+        for k in attributes:
+            if hasattr(node, k):
+                this_attrs[k] = getattr(node, k)
+        props[str(node)] = this_attrs
+    for node in new_graph.nodes:
+        this_id = str(node)
+        if this_id in props:
+            for k, v in props[str(node)].items():
+                setattr(node, k, v)
+        else:
+            # This node doesn't exist in the original graph
+            new_graph.erase_node(node)
+    return new_graph
+
+
+# There doesn't seem to be a better way to identify nodes across a graph copy
+# since fx.Graph removes all custom Node attributes during copy
+def find_in_graph_copy(
+    graph: fx.Graph, nodes: List[Union[fx.Node, fx.Proxy]]
+) -> List[fx.Node]:
+    """ !! NOT a general function --- only works if the graphs are copies."""
+    nodes = [n.node if isinstance(n, fx.Proxy) else n for n in nodes]
+    found = {None: None}
+    ids = [str(n) if n is not None else None for n in nodes]
+    for node in graph.nodes:
+        node_id = str(node)
+        if node_id in ids:
+            found[node_id] = node
+    return [found[node_id] for node_id in ids]
 
 
 def _equivalent(n1: fx.Node, n2: fx.Node) -> bool:
