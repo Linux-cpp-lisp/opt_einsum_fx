@@ -34,7 +34,7 @@ def jitable(obj: Union[fx.GraphModule, fx.Graph]) -> Union[fx.GraphModule, fx.Gr
             if node.target == "permute":
                 self_arg, args = node.args[0], node.args[1:]
                 if not isinstance(args[0], list):
-                    node.args = [self_arg, list(args)]
+                    node.args = (self_arg, list(args))
     graph.lint()
     if isinstance(obj, fx.GraphModule):
         obj.recompile()
