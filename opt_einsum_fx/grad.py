@@ -86,14 +86,13 @@ def _reshape_grad(node: fx.Node, wrt: int, grad_out: fx.Node):
             "Differentiating reshape requires static input shape information in `in_shape`."
         )
     assert isinstance(in_shape, tuple)
-    assert _prod(e for e in in_shape if e != -1) == _prod(e for e in shape if e != -1)
     return node.graph.call_method(node.target, args=(grad_out, in_shape))
 
 
 def _mmgrad(node: fx.Node, wrt: int, grad_out: fx.Node):
     assert wrt == 1
     m = node.args[0]
-    mt = node.graph.call_method("transpose", args=(m,))
+    mt = node.graph.call_method("t", args=(m,))
     return node.graph.call_function(torch.mm, args=(mt, grad_out))
 
 
