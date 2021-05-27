@@ -1,15 +1,16 @@
 Tutorial
 ========
 
-``opt_einsum_fx`` is a library for optimizng einsums and functions involving them using ` ``opt_einsum`` <https://optimized-einsum.readthedocs.io/en/stable/>`_ and `PyTorch FX <https://pytorch.org/docs/stable/fx.html>`_ compute graphs.
+``opt_einsum_fx`` is a library for optimizng einsums and functions involving them using `opt_einsum <https://optimized-einsum.readthedocs.io/en/stable/>`_ and `PyTorch FX <https://pytorch.org/docs/stable/fx.html>`_ compute graphs.
 
 The library currently supports:
+
  - Fusing multiple einsums into one
- - Optimizing einsums using the ` ``opt_einsum`` <https://optimized-einsum.readthedocs.io/en/stable/>`_ library
+ - Optimizing einsums using the `opt_einsum <https://optimized-einsum.readthedocs.io/en/stable/>`_ library
  - Fusing multiplication and division with scalar constants, including fusing _through_ operations, like einsum, that commute with scalar multiplication.
  - Placing multiplication by fused scalar constants onto the smallest intermediate in a chain of operations that commute with scalar multiplication. 
 
-``opt_einsum_fx`` is based on ` ``torch.fx`` <https://pytorch.org/docs/stable/fx.html>`_, a framework for converting between PyTorch Python code and a programatically manipulable compute graph. To use this package, it must be possible to get your function or model as a `torch.fx.Graph`: the limitations of FX's symbolic tracing are discussed `here <https://pytorch.org/docs/stable/fx.html#limitations-of-symbolic-tracing>`_.
+``opt_einsum_fx`` is based on `torch.fx <https://pytorch.org/docs/stable/fx.html>`_, a framework for converting between PyTorch Python code and a programatically manipulable compute graph. To use this package, it must be possible to get your function or model as a `torch.fx.Graph`: the limitations of FX's symbolic tracing are discussed `here <https://pytorch.org/docs/stable/fx.html#limitations-of-symbolic-tracing>`_.
 
 Minimal example
 ---------------
