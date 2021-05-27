@@ -10,6 +10,7 @@ Welcome to opt_einsum_fx's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   tutorial.rst
    api.rst
 
 
