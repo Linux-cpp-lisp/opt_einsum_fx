@@ -1,5 +1,7 @@
 # opt_einsum_fx
 
+[![Documentation Status](https://readthedocs.org/projects/opt-einsum-fx/badge/?version=latest)](https://opt-einsum-fx.readthedocs.io/en/latest/?badge=latest)
+
 Optimizng einsums and functions involving them using [`opt_einsum`](https://optimized-einsum.readthedocs.io/en/stable/) and PyTorch [FX](https://pytorch.org/docs/stable/fx.html) compute graphs.
 
 Issues, questions, PRs, and any thoughts about further optimizing these kinds of operations are welcome!
