@@ -33,6 +33,30 @@ def fuse_einsums(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
     """Fuse einsums when possible.
 
     When the output of one einsum is only used as an operand in another einsum, the two einsums can be fused into one.
+
+    Example:
+        .. code-block:: python
+
+            def fusable(x, y):
+                z = torch.einsum("ij,jk->ik", x, y)
+                return torch.einsum("ik,ij->i", z, x)
+
+            g = torch.fx.symbolic_trace(fusable)
+            print(fuse_einsums(g.graph).python_code(""))
+
+        gives::
+
+            import torch
+            def forward(self, x, y):
+                einsum_2 = torch.functional.einsum('ib,bk,ij->i', x, y, x);  x = y = None
+                return einsum_2
+
+    Args:
+        graph: the graph to process.
+        in_place (bool, optional): whether to process ``graph`` in place.
+
+    Returns:
+        The graph with fused einsums.
     """
     if not in_place:
         graph = copy.deepcopy(graph)
@@ -160,7 +184,15 @@ def prod(x):
 
 
 def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
-    """Use the multilinearity of einsum to unify and remove constant scalars around einsums."""
+    """Use the multilinearity of einsum to unify and remove constant scalars around einsums.
+
+    Args:
+        graph: the graph to process.
+        in_place (bool, optional): whether to process ``graph`` in place.
+
+    Returns:
+        The graph with fused scalars.
+    """
     if not in_place:
         graph = copy.deepcopy(graph)
 

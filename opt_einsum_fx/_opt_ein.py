@@ -22,6 +22,7 @@ def optimize_einsums_full(
     All of the restrictions of ``torch.fx`` symbolic tracing apply.
 
     Applies, in order, four optimizations:
+
         1. Scalar accumulation --- use the multilinearity of einsum to collect all constant coefficients and divisors of operands and outputs
         2. Fusing einsums --- gives greater flexibility to (3)
         3. Optimized contraction with ``opt_einsum``.
@@ -84,7 +85,18 @@ def optimize_einsums_full(
 def optimize_einsums(graph: fx.Graph, contract_kwargs: dict = {}) -> fx.Graph:
     """Optimize einsums in a ``torch.fx.Graph`` using ``opt_einsum``.
 
-    ``graph`` must have shape information such as that populated by ``torch.fx.passes.shape_prop.ShapeProp``.
+    ``graph`` must have shape information such as that populated by ``torch.fx.passes.shape_prop.ShapeProp``. The shapes are used for ``opt_einsum`` and the result is specific to the number of dimensions in the provided shapes ``opt_einsum``:
+
+        ...while it will work for a set of arrays with the same ranks as the original shapes but differing sizes, it might no longer be optimal.
+
+    See the ``opt_einsum`` `documentation <https://optimized-einsum.readthedocs.io/en/stable/reusing_paths.html>`_ for more details.
+
+    Args:
+        graph (fx.Graph): the graph to optimize
+        contract_kwargs: extra keyword arguments for ``opt_einsum.contract_path``.
+
+    Returns:
+        An optimized ``fx.Graph``.
     """
     defaults = {
         "optimize": "optimal",

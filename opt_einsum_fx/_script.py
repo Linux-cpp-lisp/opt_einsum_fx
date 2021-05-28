@@ -9,6 +9,12 @@ def jitable(obj: Union[fx.GraphModule, fx.Graph]) -> Union[fx.GraphModule, fx.Gr
     """Convert some torch calls into their TorchScript signatures.
 
     In place. Currently deals with ``tensordot`` and ``permute``.
+
+    Args:
+        obj: the ``fx.Graph`` or ``fx.GraphModule`` to process.
+
+    Returns:
+        ``obj``, modified in-place.
     """
     if isinstance(obj, fx.GraphModule):
         graph = obj.graph
