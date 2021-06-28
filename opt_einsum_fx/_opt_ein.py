@@ -9,6 +9,7 @@ import opt_einsum
 from opt_einsum.contract import _core_contract
 
 from ._fuse import fuse_einsums, fuse_scalars, _EINSUM_FUNCS
+from .fx_utils import get_shape
 
 
 def optimize_einsums_full(
@@ -112,10 +113,10 @@ def optimize_einsums(graph: fx.Graph, contract_kwargs: dict = {}) -> fx.Graph:
     for node in graph.nodes:
         node_processed = False
         if node.op == "call_function" and node.target in _EINSUM_FUNCS:
-            # Get shapes:
-            try:
-                shapes = [a.shape for a in node.args[1:]]
-            except AttributeError:
+            # Get shapes
+            shapes = [get_shape(a) for a in node.args[1:]]
+
+            if any(s is None for s in shapes):
                 warnings.warn(
                     f"einsum {repr(node)} lacked shape information; "
                     "not optimizing. "

@@ -9,6 +9,8 @@ from torch import fx
 
 from opt_einsum.parser import find_output_str
 
+from .fx_utils import get_shape
+
 _EINSUM_FUNCS = {torch.functional.einsum, torch.einsum}
 
 
@@ -314,16 +316,18 @@ def fuse_scalars(graph: fx.Graph, in_place: bool = False) -> fx.Graph:
         smallest_size = float("inf")
         for node_i, node in enumerate(lin_chain):
             for arg_i, arg in enumerate(node.args):
-                if hasattr(arg, "shape"):
-                    if prod(arg.shape) < smallest_size:
-                        smallest_node_i = node_i
-                        smallest_arg_i = arg_i
-                        smallest_size = prod(arg.shape)
+                if not isinstance(arg, fx.Node):
+                    continue
+                shape = get_shape(arg)
+                if shape is not None and prod(shape) < smallest_size:
+                    smallest_node_i = node_i
+                    smallest_arg_i = arg_i
+                    smallest_size = prod(shape)
 
         # Put the accumulated scalar on a node
         if (smallest_node_i is None) or (
-            hasattr(lin_chain[-1], "shape")
-            and prod(lin_chain[-1].shape) < smallest_size
+            get_shape(lin_chain[-1]) is not None
+            and prod(get_shape(lin_chain[-1])) < smallest_size
         ):
             # The output is the smallest, put it there
             # OR there was no smallest argument, put it on the end of the chain
