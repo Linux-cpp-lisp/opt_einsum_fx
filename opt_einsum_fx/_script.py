@@ -1,4 +1,5 @@
 from typing import Union
+from packaging import version
 
 import torch
 from torch import fx
@@ -21,6 +22,8 @@ def jitable(obj: Union[fx.GraphModule, fx.Graph]) -> Union[fx.GraphModule, fx.Gr
     else:
         graph = obj
 
+    torch_is_ge_19: bool = version.parse(torch.__version__) >= version.parse("1.9.0")
+
     for node in graph.nodes:
         if node.op == "call_function":
             if (
@@ -32,8 +35,13 @@ def jitable(obj: Union[fx.GraphModule, fx.Graph]) -> Union[fx.GraphModule, fx.Gr
                     kwargs = dict(node.kwargs)
                     dim_self, dim_other = kwargs.pop("dims")
                     assert len(args) == 2  # tensors 1 and 2
-                    args.append(list(dim_self))
-                    args.append(list(dim_other))
+                    if torch_is_ge_19:
+                        # In torch >= 1.9.0, they've corrected the torchscript interface
+                        # to align with the python one:
+                        args.append((list(dim_self), list(dim_other)))
+                    else:
+                        args.append(list(dim_self))
+                        args.append(list(dim_other))
                     node.args = tuple(args)
                     node.kwargs = kwargs
         elif node.op == "call_method":
