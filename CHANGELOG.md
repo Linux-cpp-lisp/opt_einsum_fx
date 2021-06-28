@@ -8,6 +8,10 @@ Most recent change on the bottom.
 
 ## [Unreleased]
 
+## 0.1.2 - 2021-06-28
+### Added
+- PyTorch 1.9 compatibility
+
 ## 0.1.1 - 2021-05-27
 ### Added
 - Docs
