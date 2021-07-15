@@ -10,6 +10,7 @@ from opt_einsum.contract import _core_contract
 
 from ._fuse import fuse_einsums, fuse_scalars, _EINSUM_FUNCS
 from .fx_utils import get_shape
+from ._cutensor import is_cuTENSOR_available
 
 
 def optimize_einsums_full(
@@ -130,6 +131,8 @@ def optimize_einsums(graph: fx.Graph, contract_kwargs: dict = {}) -> fx.Graph:
                     node.args[0],  # the einstr
                     *shapes,
                     shapes=True,
+                    # if we have cuTENSOR, don't use .tensordot:
+                    use_blas=not is_cuTENSOR_available(),
                     **contract_kwargs,
                 )
                 # By wrapping the arguments with proxies,

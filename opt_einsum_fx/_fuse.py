@@ -10,6 +10,7 @@ from torch import fx
 from opt_einsum.parser import find_output_str
 
 from .fx_utils import get_shape
+from ._cutensor import is_cuTENSOR_available
 
 _EINSUM_FUNCS = {torch.functional.einsum, torch.einsum}
 
@@ -175,6 +176,8 @@ SCALAR_COMMUTE_OPS = [
     operator.mul,
     operator.truediv,
 ]
+if is_cuTENSOR_available():
+    SCALAR_COMMUTE_OPS += [torch.ops._opt_einsum_fx.einsum]
 
 
 def prod(x):
