@@ -13,7 +13,6 @@ import torch
 from torch.utils.cpp_extension import (
     CUDAExtension,
     CUDA_HOME,
-    BuildExtension,
 )
 
 WITH_CUDA = torch.cuda.is_available() and CUDA_HOME is not None
