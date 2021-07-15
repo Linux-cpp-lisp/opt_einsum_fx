@@ -43,7 +43,7 @@
 #include "cutensor.h"
 
 #define HANDLE_ERROR(x) { const auto err = x;\
-    if (err == CUTENSOR_STATUS_NOT_SUPPORTED) { return false; }\
+    if (err == CUTENSOR_STATUS_NOT_SUPPORTED) { throw std::runtime_error("cutensor: status not supported"); }\
     TORCH_CHECK( err == CUTENSOR_STATUS_SUCCESS, cutensorGetErrorString(err) ); \
     }
 
@@ -143,12 +143,12 @@ struct Einsum
         if ((numModesA != numModesA_) || (numModesB != numModesB_))
         {
             // substring size and shape don't match
-            return;
+            throw std::runtime_error("modes substring size and shape don't match.");
         }
         if (numModesA_ > kMaxNumModes_ || numModesB_ > kMaxNumModes_)
         {
             // too many modes
-            return;
+            throw std::runtime_error("too many modes in one or both operands.");
         }
 
         /**
@@ -176,11 +176,10 @@ struct Einsum
                     if (numModesC > kMaxNumModes_)
                     {
                         // too many modes
-                        return false;
+                        throw std::runtime_error("too many modes in output tensor.");
                     }
                 }
             }
-            return true;
         };
 
 
@@ -189,15 +188,9 @@ struct Einsum
         if (isImplicit)
         {
             // we have to copy all non-contracted modes from A over to C
-            if (copyModesIf(modeA, numModesA_, modeB, numModesB_, implicitModeC.data(), numModesC_) == false)
-            {
-                return;
-            }
+            copyModesIf(modeA, numModesA_, modeB, numModesB_, implicitModeC.data(), numModesC_);
             // we have to copy all non-contracted modes from B over to C
-            if (copyModesIf(modeB, numModesB_, modeA, numModesA_, implicitModeC.data(), numModesC_) == false)
-            {
-                return;
-            }
+            copyModesIf(modeB, numModesB_, modeA, numModesA_, implicitModeC.data(), numModesC_);
             std::sort(implicitModeC.begin(), std::next(implicitModeC.begin(), numModesC_)); // modes are sorted w.r.t. lexical order
             implicitModeC[numModesC_] = '\0';
             redirectModeC = implicitModeC.data();
