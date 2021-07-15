@@ -17,6 +17,9 @@
 using namespace torch::autograd;
 
 
+#define HAS_ZERO_STRIDES(t) ( std::find(t.strides().begin(), t.strides().end(), 0) != std::end(t.strides()) )
+
+
 template<>
 struct CuTensorTypeTraits<at::Half> {
   static const cudaDataType_t cudaType = CUDA_R_16F;
@@ -34,7 +37,7 @@ struct CuTensorTypeTraits<at::BFloat16> {
 constexpr int kMaxNumModes_ = 40; // maximal number of modes supported by cuTENSOR
 
 std::tuple<torch::Tensor, std::string, std::string, std::string> einsum_fw(
-    std::string einstr,
+    const std::string einstr,
     torch::Tensor op0,
     torch::Tensor op1
 ) {
@@ -43,6 +46,13 @@ std::tuple<torch::Tensor, std::string, std::string, std::string> einsum_fw(
 
     torch::Tensor output_tensor;
     std::string modesA, modesB, modesC;
+
+    // TODO: cuTENSOR (basically) doesn't support strides of 0,
+    // especially when all strides are 0. This is probably not
+    // optimal to use .contiguous() here, but it's what happens
+    // in torch.einsum, so it still can't be much of a loss.
+    if ( HAS_ZERO_STRIDES(op0) ) op0 = op0.contiguous();
+    if ( HAS_ZERO_STRIDES(op1) ) op1 = op1.contiguous();
     
     AT_DISPATCH_FLOATING_TYPES_AND2(
         at::ScalarType::Half,
@@ -71,14 +81,15 @@ std::tuple<torch::Tensor, std::string, std::string, std::string> einsum_fw(
                                         op0.data_ptr<scalar_t>(),
                                         op1.data_ptr<scalar_t>(),
                                         output_tensor.data_ptr<scalar_t>(),
+                                        output_tensor.strides().vec(),
                                         workspace.data_ptr<uint8_t>(),
                                         stream);
 
             if (! ret) throw std::runtime_error("cutensor: Launch failed.");
 
-            modesA = std::string(myEinsum.modesA().begin(), myEinsum.modesA().end());
-            modesB = std::string(myEinsum.modesB().begin(), myEinsum.modesB().end());
-            modesC = std::string(myEinsum.modesC().begin(), myEinsum.modesC().end());
+            modesA = myEinsum.modesA();
+            modesB = myEinsum.modesB();
+            modesC = myEinsum.modesC();
     });
     return {output_tensor, modesA, modesB, modesC};
 }
@@ -88,7 +99,7 @@ class EinsumFunction : public torch::autograd::Function<EinsumFunction> {
     public:
     static torch::Tensor forward(
         AutogradContext *ctx,
-        std::string einstr,
+        const std::string einstr,
         torch::Tensor op0,
         torch::Tensor op1
     ) {
@@ -114,9 +125,9 @@ class EinsumFunction : public torch::autograd::Function<EinsumFunction> {
         torch::Tensor op0 = saved[0];
         torch::Tensor op1 = saved[1];
         std::string modesA, modesB, modesC;
-        modesA = ctx->saved_data["modesA"].toString();
-        modesB = ctx->saved_data["modesB"].toString();
-        modesC = ctx->saved_data["modesC"].toString();
+        modesA = ctx->saved_data["modesA"].toStringRef();
+        modesB = ctx->saved_data["modesB"].toStringRef();
+        modesC = ctx->saved_data["modesC"].toStringRef();
         // the original code in einsum.h uses the equation characters as mode ints,
         // so we can use them directly as those too:
         torch::Tensor gradA, gradB;
@@ -128,14 +139,10 @@ class EinsumFunction : public torch::autograd::Function<EinsumFunction> {
         char tmp_c;
         if ( op0.requires_grad() ) {
             // First we have the output grad
-            for ( char c : modesC ) {
-                einstr.push_back(c);
-            }
+            einstr += modesC;
             einstr.push_back(',');
             // Then op1
-            for ( char c : modesB ) {
-                einstr.push_back(c);
-            }
+            einstr += modesB;
             einstr += "->";
             // Then the output indexes we get by contraction ---
             // Ones that get summed out in the original einsum we put back through duplication
@@ -170,14 +177,10 @@ class EinsumFunction : public torch::autograd::Function<EinsumFunction> {
         dims_to_expand = false;
         if ( op1.requires_grad() ) {
             // First we have the output grad
-            for ( char c : modesC ) {
-                einstr.push_back(static_cast<char>(c));
-            }
+            einstr += modesC;
             einstr.push_back(',');
             // Then op0
-            for ( char c : modesA ) {
-                einstr.push_back(static_cast<char>(c));
-            }
+            einstr += modesA;
             einstr += "->";
             // Then the output indexes we get by contraction ---
             // Ones that get summed out in the original einsum we put back through duplication
@@ -207,6 +210,7 @@ class EinsumFunction : public torch::autograd::Function<EinsumFunction> {
             }
         }
         return {
+            torch::Tensor(),
             op0.requires_grad() ? gradA : torch::Tensor(),
             op1.requires_grad() ? gradB : torch::Tensor()
         };
@@ -217,7 +221,7 @@ class EinsumFunction : public torch::autograd::Function<EinsumFunction> {
 // https://pytorch.org/cppdocs/api/function_namespaceat_1a9279dd932c0f6bebf3807a34ccbe364c.htm
 // This function dispatches to the cuTENSOR GPU implementation for CUDA tensors, or the built-in einsum for others.
 torch::Tensor einsum(
-    std::string einstr,
+    const std::string einstr,
     torch::Tensor op0,
     torch::Tensor op1
 ) {

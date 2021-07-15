@@ -42,10 +42,14 @@
 #include <cuda_fp16.h>
 #include "cutensor.h"
 
+
 #define HANDLE_ERROR(x) { const auto err = x;\
-    if (err == CUTENSOR_STATUS_NOT_SUPPORTED) { throw std::runtime_error("cutensor: status not supported"); }\
-    TORCH_CHECK( err == CUTENSOR_STATUS_SUCCESS, cutensorGetErrorString(err) ); \
-    }
+    std::ostringstream errstr; \
+    if (err != CUTENSOR_STATUS_SUCCESS) { \
+        errstr << "cuTENSOR error at einsum.h:" << __LINE__ << ": " << cutensorGetErrorString(err); \
+        throw std::runtime_error(errstr.str()); \
+    } \
+}
 
 template<typename U>
 struct CuTensorTypeTraits;
@@ -140,15 +144,19 @@ struct Einsum
             }
         }
 
-        if ((numModesA != numModesA_) || (numModesB != numModesB_))
+        if (numModesA != numModesA_)
         {
-            // substring size and shape don't match
-            throw std::runtime_error("modes substring size and shape don't match.");
+            throw std::runtime_error("modes substring for first operand and shape don't match.");
         }
-        if (numModesA_ > kMaxNumModes_ || numModesB_ > kMaxNumModes_)
+        if (numModesB != numModesB_) {
+            throw std::runtime_error("modes substring for second operand and shape don't match.");
+        }
+        if (numModesA_ > kMaxNumModes_)
         {
-            // too many modes
-            throw std::runtime_error("too many modes in one or both operands.");
+            throw std::runtime_error("too many modes in first operand.");
+        }
+        if (numModesB_ > kMaxNumModes_) {
+            throw std::runtime_error("too many modes in second operand.");
         }
 
         /**
@@ -203,21 +211,21 @@ struct Einsum
 
         for (uint32_t i = 0; i < numModesA_; i++)
         {
-            modesA_[i] = modeA[numModesA_ - i - 1];
-            extentA_[i] = A_shape[numModesA_ - i - 1];
-            stridesA_[i] = A_strides[numModesA_ - i - 1];
+            modesA_[i] = modeA[i];
+            extentA_[i] = A_shape[i];
+            stridesA_[i] = A_strides[i];
         }
 
         for (uint32_t i = 0; i < numModesB_; i++)
         {
-            modesB_[i] = modeB[numModesB_ - i - 1];
-            extentB_[i] = B_shape[numModesB_ - i - 1];
-            stridesB_[i] = B_strides[numModesB_ - i - 1];
+            modesB_[i] = modeB[i];
+            extentB_[i] = B_shape[i];
+            stridesB_[i] = B_strides[i];
         }
 
         for (uint32_t i = 0; i < numModesC_; i++)
         {
-            const auto mode = redirectModeC[numModesC_ - i - 1];
+            const auto mode = redirectModeC[i];
             modesC_[i] = mode;
             bool found = false;
             for (uint32_t j=0; j < numModesA_; ++j)
@@ -250,7 +258,7 @@ struct Einsum
         std::vector<IntType> extentC(numModesC_);
         for (int i=0; i < numModesC_; ++i)
         {
-            extentC[i] = extentC_.at(numModesC_ - i - 1);
+            extentC[i] = extentC_.at(i);
         }
 
         return extentC;
@@ -269,6 +277,7 @@ struct Einsum
                  const void* A_raw,
                  const void* B_raw,
                  void* C_raw,
+                 const std::vector<IntType> &C_strides,
                  void *work_raw, cudaStream_t stream) const
     {
         if (!isInitialized_) return false;
@@ -289,7 +298,7 @@ struct Einsum
                     &descC,
                     numModesC_,
                     extentC_.data(),
-                    NULL /* = stride*/,  // we always do basic striding for output
+                    C_strides.data(),
                     cudaType, CUTENSOR_OP_IDENTITY));
 
         uint32_t alignmentRequirementA;
@@ -357,9 +366,24 @@ struct Einsum
     }
 
     bool isInitialized() const { return isInitialized_; }
-    std::array<int, kMaxNumModes_> modesA() const { return modesA_; }
-    std::array<int, kMaxNumModes_> modesB() const { return modesB_; }
-    std::array<int, kMaxNumModes_> modesC() const { return modesC_; }
+    std::string modesA() const {
+        std::string out;
+        out.reserve(numModesA_);
+        for (size_t i = 0; i < numModesA_; i++ ) { out.push_back(static_cast<char>(modesA_.at(i))); }
+        return out;
+    }
+    std::string modesB() const {
+        std::string out;
+        out.reserve(numModesB_);
+        for (size_t i = 0; i < numModesB_; i++ ) { out.push_back(static_cast<char>(modesB_.at(i))); }
+        return out;
+    }
+    std::string modesC() const {
+        std::string out;
+        out.reserve(numModesC_);
+        for (size_t i = 0; i < numModesC_; i++ ) { out.push_back(static_cast<char>(modesC_.at(i))); }
+        return out;
+    }
 
     private:
     static const size_t kWorksize_ = 1024ULL * 1024ULL * 8ULL * 128ULL;
