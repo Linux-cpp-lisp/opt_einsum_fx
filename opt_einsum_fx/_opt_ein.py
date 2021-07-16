@@ -10,7 +10,7 @@ from opt_einsum.contract import _core_contract
 
 from ._fuse import fuse_einsums, fuse_scalars, _EINSUM_FUNCS
 from .fx_utils import get_shape
-from ._cutensor import is_cuTENSOR_available
+from ._cutensor import is_cuTENSOR_available, make_einsums_cuTENSOR
 
 
 def optimize_einsums_full(
@@ -165,4 +165,9 @@ def optimize_einsums(graph: fx.Graph, contract_kwargs: dict = {}) -> fx.Graph:
             env[node.name] = new_node
 
     new_graph.lint()
+
+    # If we have cuTENSOR, we need to rewrite einsums
+    if is_cuTENSOR_available():
+        make_einsums_cuTENSOR(new_graph)
+
     return new_graph
