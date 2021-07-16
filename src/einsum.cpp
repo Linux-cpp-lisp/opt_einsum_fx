@@ -53,7 +53,7 @@ std::tuple<torch::Tensor, std::string, std::string, std::string> einsum_fw(
     // in torch.einsum, so it still can't be much of a loss.
     if ( HAS_ZERO_STRIDES(op0) ) op0 = op0.contiguous();
     if ( HAS_ZERO_STRIDES(op1) ) op1 = op1.contiguous();
-    
+
     AT_DISPATCH_FLOATING_TYPES_AND2(
         at::ScalarType::Half,
         at::ScalarType::BFloat16,
