@@ -339,6 +339,22 @@ struct Einsum
                         handle, &find, 
                         algo));
 
+            const cutensorAutotuneMode_t autotuneMode = CUTENSOR_AUTOTUNE_INCREMENTAL;
+            HANDLE_ERROR(cutensorContractionFindSetAttribute(
+                handle,
+                &find,
+                CUTENSOR_CONTRACTION_FIND_AUTOTUNE_MODE,
+                &autotuneMode,
+                sizeof(cutensorAutotuneMode_t)));
+
+            const uint32_t incCount = 4;
+            HANDLE_ERROR(cutensorContractionFindSetAttribute(
+                handle,
+                &find,
+                CUTENSOR_CONTRACTION_FIND_INCREMENTAL_COUNT,
+                &incCount,
+                sizeof(uint32_t)));
+
             cutensorContractionPlan_t plan;
             HANDLE_ERROR(cutensorInitContractionPlan(handle,
                         &plan, &desc, &find, kWorksize_));
@@ -401,12 +417,15 @@ struct Einsum
     std::array<int64_t, kMaxNumModes_> stridesB_;
 };
 
+
+#define CUTENSOR_N_CACHELINES 512
+
 inline cutensorHandle_t CreateCuTensorHandle() {
   cutensorHandle_t handle;
   cutensorInit(&handle);
   if (getenv("CUTENSOR_CACHE") && atoi(getenv("CUTENSOR_CACHE")) == 1) {
-    cutensorPlanCacheline_t* cachelines = new cutensorPlanCacheline_t[32];
-    cutensorHandleAttachPlanCachelines(&handle, cachelines, 32);
+    cutensorPlanCacheline_t* cachelines = new cutensorPlanCacheline_t[CUTENSOR_N_CACHELINES];
+    HANDLE_ERROR( cutensorHandleAttachPlanCachelines(&handle, cachelines, CUTENSOR_N_CACHELINES) );
   }
   return handle;
 }
