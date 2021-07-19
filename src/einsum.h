@@ -1,9 +1,9 @@
 // Adapted from the CUDALibrarySamples
 // https://github.com/NVIDIA/CUDALibrarySamples/tree/master/cuTENSOR
-/*  
+/*
  * Copyright (c) 2021, NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
- * 
- * 
+ *
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
  * met:
@@ -15,10 +15,10 @@
  *  - Neither the name(s) of the copyright holder(s) nor the names of its
  *    contributors may be used to endorse or promote products derived
  *    from this software without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
  * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
  * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
  * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
@@ -27,7 +27,7 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */  
+ */
 
 #include <algorithm>
 #include <cassert>
@@ -100,7 +100,7 @@ struct Einsum
         const auto dots = equation.find("...");
         TORCH_CHECK( dots == std::string::npos , "Broadcast einsum with ... is not supported.");
         const bool isImplicit = (arrow_pos == std::string::npos);
-        
+
         // TODO: support this in backward!
         const bool usesB = (comma_pos != std::string::npos);
         if (! usesB)
@@ -109,7 +109,7 @@ struct Einsum
         }
 
         size_t a_start = 0;
-        size_t a_end = isImplicit ? ((comma_pos == std::string::npos) ? equation.size() : comma_pos) : 
+        size_t a_end = isImplicit ? ((comma_pos == std::string::npos) ? equation.size() : comma_pos) :
                                     ((comma_pos == std::string::npos) ? arrow_pos : comma_pos);
         size_t b_start = usesB ? comma_pos + 1 : 0;
         size_t b_end   = usesB ? (isImplicit ? equation.size() : arrow_pos) : 0;
@@ -335,8 +335,8 @@ struct Einsum
 
             cutensorAlgo_t algo = CUTENSOR_ALGO_DEFAULT;
             cutensorContractionFind_t find;
-            HANDLE_ERROR(cutensorInitContractionFind( 
-                        handle, &find, 
+            HANDLE_ERROR(cutensorInitContractionFind(
+                        handle, &find,
                         algo));
 
             const cutensorAutotuneMode_t autotuneMode = CUTENSOR_AUTOTUNE_INCREMENTAL;
@@ -434,4 +434,3 @@ inline cutensorHandle_t* GetCuTensorHandle() {
   static cutensorHandle_t handle = CreateCuTensorHandle();
   return &handle;
 }
-

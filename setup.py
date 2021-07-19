@@ -1,9 +1,9 @@
-import setuptools
-from distutils.spawn import find_executable
 import glob
 import os
-import subprocess
 import re
+import setuptools
+import subprocess
+from distutils.spawn import find_executable
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
@@ -16,6 +16,8 @@ from torch.utils.cpp_extension import (
 )
 
 WITH_CUDA = torch.cuda.is_available() and CUDA_HOME is not None
+
+extensions = []
 
 if WITH_CUDA:
     include_dirs = []
@@ -67,8 +69,6 @@ if WITH_CUDA:
             runtime_library_dirs=library_dirs,
         )
     ]
-else:
-    extensions = []
 
 # == end extension ==
 
