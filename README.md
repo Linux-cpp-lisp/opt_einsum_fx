@@ -2,7 +2,7 @@
 
 [![Documentation Status](https://readthedocs.org/projects/opt-einsum-fx/badge/?version=latest)](https://opt-einsum-fx.readthedocs.io/en/latest/?badge=latest)
 
-Optimizng einsums and functions involving them using [`opt_einsum`](https://optimized-einsum.readthedocs.io/en/stable/) and PyTorch [FX](https://pytorch.org/docs/stable/fx.html) compute graphs.
+Optimizing einsums and functions involving them using [`opt_einsum`](https://optimized-einsum.readthedocs.io/en/stable/) and PyTorch [FX](https://pytorch.org/docs/stable/fx.html) compute graphs.
 
 Issues, questions, PRs, and any thoughts about further optimizing these kinds of operations are welcome!
 
@@ -65,7 +65,7 @@ import torch
 def forward(self, a, b, vec):
     einsum_1 = torch.functional.einsum('zij,zjk,zk->zi', a, b, vec);  a = b = vec = None
     return einsum_1
-    
+
 Optimized code:
 import torch
 def forward(self, a, b, vec):
