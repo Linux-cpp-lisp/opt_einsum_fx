@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 import string
 import copy
 import operator
@@ -17,7 +17,7 @@ _EINSUM_FUNCS = {torch.functional.einsum, torch.einsum}
 # == Einsum fusion ==
 
 
-def _get_einstrs(einstr):
+def _get_einstrs(einstr: str) -> Tuple[List[str], str]:
     if "..." in einstr:
         raise NotImplementedError("Ellipsis `...` in einsum string not supported yet")
     tmp = einstr.split("->")
