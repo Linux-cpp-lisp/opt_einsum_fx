@@ -1,4 +1,4 @@
-from typing import Callable, Union
+from typing import Callable, Union, Optional
 import warnings
 
 import torch
@@ -17,6 +17,7 @@ def optimize_einsums_full(
     model: Union[torch.nn.Module, Callable, fx.Graph],
     example_inputs: tuple,
     contract_kwargs: dict = {},
+    use_cuTENSOR: Optional[bool] = None,
     tracer_class: type = fx.Tracer,
 ) -> Union[fx.GraphModule, fx.Graph]:
     """Optimize einsums in ``model`` for ``example_inputs``.
@@ -65,7 +66,9 @@ def optimize_einsums_full(
     sp.run(*example_inputs)
 
     # 4. Optimize einsums
-    out_mod.graph = optimize_einsums(out_mod.graph, contract_kwargs)
+    out_mod.graph = optimize_einsums(
+        out_mod.graph, contract_kwargs, use_cuTENSOR=use_cuTENSOR
+    )
     out_mod.recompile()
 
     # 5. Shape prop (again)
@@ -84,7 +87,9 @@ def optimize_einsums_full(
 
 
 # Based on "Proxy Retracing" example in https://pytorch.org/docs/stable/fx.html
-def optimize_einsums(graph: fx.Graph, contract_kwargs: dict = {}) -> fx.Graph:
+def optimize_einsums(
+    graph: fx.Graph, contract_kwargs: dict = {}, use_cuTENSOR: Optional[bool] = None
+) -> fx.Graph:
     """Optimize einsums in a ``torch.fx.Graph`` using ``opt_einsum``.
 
     ``graph`` must have shape information such as that populated by ``torch.fx.passes.shape_prop.ShapeProp``. The shapes are used for ``opt_einsum`` and the result is specific to the number of dimensions in the provided shapes ``opt_einsum``:
@@ -105,6 +110,11 @@ def optimize_einsums(graph: fx.Graph, contract_kwargs: dict = {}) -> fx.Graph:
     }
     defaults.update(contract_kwargs)
     contract_kwargs = defaults
+
+    if use_cuTENSOR and not is_cuTENSOR_available():
+        raise RuntimeError(
+            "cuTENSOR requested, but opt_einsum_fx was not built with it."
+        )
 
     new_graph = fx.Graph()
     # env keeps track of new injected nodes in addition to existing ones,
@@ -132,7 +142,7 @@ def optimize_einsums(graph: fx.Graph, contract_kwargs: dict = {}) -> fx.Graph:
                     *shapes,
                     shapes=True,
                     # if we have cuTENSOR, don't use .tensordot:
-                    use_blas=not is_cuTENSOR_available(),
+                    use_blas=not use_cuTENSOR,
                     **contract_kwargs,
                 )
                 # By wrapping the arguments with proxies,
@@ -167,7 +177,7 @@ def optimize_einsums(graph: fx.Graph, contract_kwargs: dict = {}) -> fx.Graph:
     new_graph.lint()
 
     # If we have cuTENSOR, we need to rewrite einsums
-    if is_cuTENSOR_available():
+    if use_cuTENSOR:
         make_einsums_cuTENSOR(new_graph)
 
     return new_graph
