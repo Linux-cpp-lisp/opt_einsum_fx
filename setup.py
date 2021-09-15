@@ -23,6 +23,6 @@ setuptools.setup(
         "Development Status :: 4 - Beta",
     ],
     python_requires=">=3.6",
-    install_requires=["torch>=1.8.0", "opt_einsum"],
+    install_requires=["torch>=1.8.0", "opt_einsum", "packaging"],
     packages=["opt_einsum_fx"],
 )
