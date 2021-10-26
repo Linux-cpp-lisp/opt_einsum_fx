@@ -106,6 +106,7 @@ def optimize_einsums(graph: fx.Graph, contract_kwargs: dict = {}) -> fx.Graph:
     contract_kwargs = defaults
 
     new_graph = fx.Graph()
+    tracer = fx.proxy.GraphAppendingTracer(new_graph)
     # env keeps track of new injected nodes in addition to existing ones,
     # making sure they get into new_graph
     env = {}
@@ -136,7 +137,7 @@ def optimize_einsums(graph: fx.Graph, contract_kwargs: dict = {}) -> fx.Graph:
                 # we can dispatch to opt_einsum and implicitly
                 # add it to the Graph by symbolically tracing it.
                 proxy_args = [
-                    fx.Proxy(env[x.name]) if isinstance(x, fx.Node) else x
+                    fx.Proxy(env[x.name], tracer=tracer) if isinstance(x, fx.Node) else x
                     for x in node.args
                 ]
                 # Use _core_contract to avoid `len()` calls that
