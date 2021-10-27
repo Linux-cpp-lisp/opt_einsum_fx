@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="opt_einsum_fx",
-    version="0.1.2",
+    version="0.1.3",
     author="Linux-cpp-lisp",
     url="https://github.com/Linux-cpp-lisp/opt_einsum_fx",
     description="Einsum optimization using opt_einsum and PyTorch FX",
