@@ -10,6 +10,10 @@ Most recent change on the bottom.
 ### Fixed
 - Added `packaging` to dependency list
 
+## 0.1.3 - 2021-10-27
+### Added
+- PyTorch 1.10 compatability
+
 ## 0.1.2 - 2021-06-28
 ### Added
 - PyTorch 1.9 compatibility
