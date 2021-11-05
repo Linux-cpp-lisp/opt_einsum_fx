@@ -56,6 +56,7 @@ class EfficientShapeProp(torch.fx.Interpreter):
             equation, *operands = n.args
             shapes = [op.meta['tensor_meta'].shape for op in operands]
 
+            assert len({op.meta['tensor_meta'].dtype for op in operands}) == 1
             meta = SimpleMeta(einsum_shape(equation, *shapes), operands[0].meta['tensor_meta'].dtype)
             result = torch.zeros(meta.shape, dtype=meta.dtype, device='cpu')
         elif n.op == "call_function" and n.target == torch.tensordot:
@@ -63,6 +64,7 @@ class EfficientShapeProp(torch.fx.Interpreter):
             shape_a = [dim for i, dim in enumerate(shape_a) if i not in n.kwargs['dims'][0]]
             shape_b = [dim for i, dim in enumerate(shape_b) if i not in n.kwargs['dims'][1]]
 
+            assert len({op.meta['tensor_meta'].dtype for op in n.args}) == 1
             meta = SimpleMeta(shape_a + shape_b, n.args[0].meta['tensor_meta'].dtype)
             result = torch.zeros(meta.shape, dtype=meta.dtype, device='cpu')
         else:
