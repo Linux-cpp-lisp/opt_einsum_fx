@@ -1,14 +1,13 @@
-from typing import Callable, Union
 import warnings
-
-import torch
-from torch import fx
-from torch.fx.passes.shape_prop import ShapeProp
+from typing import Callable, Union
 
 import opt_einsum
+import torch
 from opt_einsum.contract import _core_contract
+from torch import fx
 
-from ._fuse import fuse_einsums, fuse_scalars, _EINSUM_FUNCS
+from ._fuse import _EINSUM_FUNCS, fuse_einsums, fuse_scalars
+from ._shape_prop import ShapeProp
 from .fx_utils import get_shape
 
 
