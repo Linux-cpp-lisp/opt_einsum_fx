@@ -53,19 +53,29 @@ class EfficientShapeProp(ShapeProp):
     """
 
     def run_node(self, n: Node) -> Any:
-        if n.op != "call_function" or n.target not in _EINSUM_FUNCS:
-            return super().run_node(n)
+        if n.op == "call_function" and n.target in _EINSUM_FUNCS:
+            equation, *operands = n.args
+            shapes = [op.meta['tensor_meta'].shape for op in operands]
+            if len(operands) > 0:
+                dtypes = [op.meta['tensor_meta'].dtype for op in operands]
+                dtype = dtypes[0]
+                assert all(d == dtype for d in dtypes), "Tensors in einsum have different dtypes!"
+            else:
+                dtype = float
 
-        equation, *operands = n.args
-        shapes = [op.meta['tensor_meta'].shape for op in operands]
-        if len(operands) > 0:
-            dtypes = [op.meta['tensor_meta'].dtype for op in operands]
+            shape = einsum_shape(equation, *shapes)
+        elif n.op == "call_function" and n.target == torch.tensordot:
+            shape_a, shape_b = [op.meta['tensor_meta'].shape for op in n.args]
+            inds_a, inds_b = n.kwargs['dims']
+            shape_a = [n for i, n in enumerate(shape_a) if i not in inds_a]
+            shape_b = [n for i, n in enumerate(shape_b) if i not in inds_b]
+            shape = shape_a + shape_b
+
+            dtypes = [op.meta['tensor_meta'].dtype for op in n.args]
             dtype = dtypes[0]
-            assert all(d == dtype for d in dtypes), "Tensors in einsum have different dtypes!"
+            assert all(d == dtype for d in dtypes), "Tensors in tensordot have different dtypes!"
         else:
-            dtype = float
-
-        shape = einsum_shape(equation, *shapes)
+            return super().run_node(n)
 
         n.meta['tensor_meta'] = SimpleMeta(shape, dtype)
         n.meta['type'] = torch.Tensor
