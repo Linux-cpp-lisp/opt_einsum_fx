@@ -2,8 +2,7 @@ from typing import Any, NamedTuple
 
 import opt_einsum
 import torch
-from torch.fx.node import Node  # map_aggregate
-from torch.fx.passes.shape_prop import ShapeProp  # TensorMetadata
+from torch.fx.node import Node
 
 from ._fuse import _EINSUM_FUNCS
 
@@ -29,7 +28,7 @@ class SimpleMeta(NamedTuple):
     dtype: torch.dtype
 
 
-class EfficientShapeProp(ShapeProp):
+class EfficientShapeProp(torch.fx.Interpreter):
     """
     Like ShapeProp, traverses a graph Node-by-Node
     and records the shape and type of the result
@@ -56,31 +55,31 @@ class EfficientShapeProp(ShapeProp):
         if n.op == "call_function" and n.target in _EINSUM_FUNCS:
             equation, *operands = n.args
             shapes = [op.meta['tensor_meta'].shape for op in operands]
-            if len(operands) > 0:
-                dtypes = [op.meta['tensor_meta'].dtype for op in operands]
-                dtype = dtypes[0]
-                assert all(d == dtype for d in dtypes), "Tensors in einsum have different dtypes!"
-            else:
-                dtype = float
 
-            shape = einsum_shape(equation, *shapes)
+            meta = SimpleMeta(einsum_shape(equation, *shapes), operands[0].meta['tensor_meta'].dtype)
+            result = torch.zeros(meta.shape, dtype=meta.dtype, device='cpu')
         elif n.op == "call_function" and n.target == torch.tensordot:
             shape_a, shape_b = [op.meta['tensor_meta'].shape for op in n.args]
-            inds_a, inds_b = n.kwargs['dims']
-            shape_a = [n for i, n in enumerate(shape_a) if i not in inds_a]
-            shape_b = [n for i, n in enumerate(shape_b) if i not in inds_b]
-            shape = shape_a + shape_b
+            shape_a = [dim for i, dim in enumerate(shape_a) if i not in n.kwargs['dims'][0]]
+            shape_b = [dim for i, dim in enumerate(shape_b) if i not in n.kwargs['dims'][1]]
 
-            dtypes = [op.meta['tensor_meta'].dtype for op in n.args]
-            dtype = dtypes[0]
-            assert all(d == dtype for d in dtypes), "Tensors in tensordot have different dtypes!"
+            meta = SimpleMeta(shape_a + shape_b, n.args[0].meta['tensor_meta'].dtype)
+            result = torch.zeros(meta.shape, dtype=meta.dtype, device='cpu')
         else:
-            return super().run_node(n)
+            result = super().run_node(n)
 
-        n.meta['tensor_meta'] = SimpleMeta(shape, dtype)
-        n.meta['type'] = torch.Tensor
+            if isinstance(result, torch.Tensor):
+                meta = SimpleMeta(result.shape, result.dtype)
+            else:
+                meta = None
 
-        return torch.zeros(shape, dtype=dtype, device='cpu')
+        n.meta['tensor_meta'] = meta
+        n.meta['type'] = type(result)
+
+        return result
+
+    def propagate(self, *args):
+        return super().run(*args)
 
 
 def einsum_shape(subscripts, *shapes):
