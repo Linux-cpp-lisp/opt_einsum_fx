@@ -53,20 +53,21 @@ class EfficientShapeProp(torch.fx.Interpreter):
 
     def run_node(self, n: Node) -> Any:
         if n.op == "call_function" and n.target in _EINSUM_FUNCS:
-            equation, *operands = n.args
-            shapes = [op.meta['tensor_meta'].shape for op in operands]
+            args, kwargs = self.fetch_args_kwargs_from_env(n)
+            equation, *operands = args
+            shapes = [op.shape for op in operands]
 
-            assert len({op.meta['tensor_meta'].dtype for op in operands}) == 1
-            meta = SimpleMeta(einsum_shape(equation, *shapes), operands[0].meta['tensor_meta'].dtype)
-            result = torch.zeros((1 for _ in meta.shape), dtype=meta.dtype, device='cpu').expand(meta.shape)
+            assert len({op.dtype for op in operands}) == 1
+            meta = SimpleMeta(einsum_shape(equation, *shapes), operands[0].dtype)
+            result = torch.zeros((1,) * len(meta.shape), dtype=meta.dtype, device=operands[0].device).expand(meta.shape)
         elif n.op == "call_function" and n.target == torch.tensordot:
-            shape_a, shape_b = [op.meta['tensor_meta'].shape for op in n.args]
-            shape_a = [dim for i, dim in enumerate(shape_a) if i not in n.kwargs['dims'][0]]
-            shape_b = [dim for i, dim in enumerate(shape_b) if i not in n.kwargs['dims'][1]]
+            args, kwargs = self.fetch_args_kwargs_from_env(n)
+            shape_a = [dim for i, dim in enumerate(args[0].shape) if i not in kwargs['dims'][0]]
+            shape_b = [dim for i, dim in enumerate(args[1].shape) if i not in kwargs['dims'][1]]
 
-            assert len({op.meta['tensor_meta'].dtype for op in n.args}) == 1
-            meta = SimpleMeta(shape_a + shape_b, n.args[0].meta['tensor_meta'].dtype)
-            result = torch.zeros(meta.shape, dtype=meta.dtype, device='cpu')
+            assert len({op.dtype for op in args}) == 1
+            meta = SimpleMeta(shape_a + shape_b, args[0].dtype)
+            result = torch.zeros((1,) * len(meta.shape), dtype=meta.dtype, device=args[0].device).expand(meta.shape)
         else:
             result = super().run_node(n)
 
