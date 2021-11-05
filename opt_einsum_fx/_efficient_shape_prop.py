@@ -73,6 +73,7 @@ class EfficientShapeProp(torch.fx.Interpreter):
             else:
                 meta = None
 
+        n.meta = dict()
         n.meta['tensor_meta'] = meta
         n.meta['type'] = type(result)
 
