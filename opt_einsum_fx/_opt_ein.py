@@ -3,7 +3,7 @@ import warnings
 
 import torch
 from torch import fx
-from torch.fx.passes.shape_prop import ShapeProp
+from ._efficient_shape_prop import EfficientShapeProp as ShapeProp
 
 import opt_einsum
 from opt_einsum.contract import _core_contract
