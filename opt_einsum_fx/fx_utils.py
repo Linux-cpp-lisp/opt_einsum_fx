@@ -10,3 +10,5 @@ def get_shape(n: fx.Node) -> Optional[torch.Size]:
         return n.meta["tensor_meta"].shape
     except KeyError:
         return None
+    except AttributeError:
+        return None
