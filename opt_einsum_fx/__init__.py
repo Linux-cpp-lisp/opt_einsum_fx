@@ -1,4 +1,4 @@
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 
 from ._script import jitable
 from ._opt_ein import optimize_einsums, optimize_einsums_full

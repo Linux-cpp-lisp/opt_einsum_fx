@@ -8,6 +8,11 @@ Most recent change on the bottom.
 
 ## [Unreleased]
 
+## 0.1.4 - 2021-11-7
+### Added
+- `opt_einsum_fx.__version__`
+- Partially symbolic shape propagation for efficient einsum optimization (#15)
+
 ## 0.1.3 - 2021-10-29
 ### Added
 - PyTorch 1.10 compatability
