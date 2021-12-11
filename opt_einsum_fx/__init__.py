@@ -4,6 +4,7 @@ from ._script import jitable
 from ._opt_ein import optimize_einsums, optimize_einsums_full
 from ._fuse import fuse_einsums, fuse_scalars
 from ._efficient_shape_prop import EfficientShapeProp
+from ._cast_dtypes import cast_dtypes
 
 __all__ = [
     "jitable",
@@ -12,4 +13,5 @@ __all__ = [
     "fuse_einsums",
     "fuse_scalars",
     "EfficientShapeProp",
+    "cast_dtypes",
 ]

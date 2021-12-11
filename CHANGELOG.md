@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Most recent change on the bottom.
 
 ## [Unreleased]
+### Added
+- Added dtype autocasting based on example input trace
 
 ## 0.1.4 - 2021-11-7
 ### Added
