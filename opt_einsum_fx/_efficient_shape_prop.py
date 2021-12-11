@@ -49,6 +49,10 @@ class EfficientShapeProp(torch.fx.Interpreter):
     (The call to opt_einsum that will typically follow
     this, also doesn't actually build the tensors
     during its exploration.)
+
+    Args:
+        autocast_default_type (dtype-like or None): whether to allow autocast type mechanics;
+            if None no autocasting is done.
     """
 
     def __init__(

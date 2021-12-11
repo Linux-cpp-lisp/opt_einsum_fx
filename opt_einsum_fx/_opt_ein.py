@@ -9,6 +9,7 @@ import opt_einsum
 from opt_einsum.contract import _core_contract
 
 from ._fuse import fuse_einsums, fuse_scalars, _EINSUM_FUNCS
+from ._cast_dtypes import cast_dtypes as cast_dtypes_pass
 from .fx_utils import get_shape
 
 
@@ -16,6 +17,7 @@ def optimize_einsums_full(
     model: Union[torch.nn.Module, Callable, fx.Graph],
     example_inputs: tuple,
     contract_kwargs: dict = {},
+    cast_dtypes: bool = False,
     tracer_class: type = fx.Tracer,
 ) -> Union[fx.GraphModule, fx.Graph]:
     """Optimize einsums in ``model`` for ``example_inputs``.
@@ -60,7 +62,7 @@ def optimize_einsums_full(
     out_mod = fx.GraphModule(model, graph)
 
     # 3. Shape propagation
-    sp = ShapeProp(out_mod)
+    sp = ShapeProp(out_mod, autocast_default_type=torch.get_default_dtype())
     sp.run(*example_inputs)
 
     # 4. Optimize einsums
@@ -69,11 +71,14 @@ def optimize_einsums_full(
 
     # 5. Shape prop (again)
     # We need shapes to put the scalars in the best place
-    sp = ShapeProp(out_mod)
+    sp = ShapeProp(out_mod, autocast_default_type=torch.get_default_dtype())
     sp.run(*example_inputs)
 
     # 6. Final scalar fusion to move scalars
     out_mod.graph = fuse_scalars(out_mod.graph, in_place=True)
+
+    # 7. cast dtypes
+    out_mod = cast_dtypes_pass(out_mod, example_inputs=example_inputs)
 
     if output_graph:
         return out_mod.graph
@@ -128,16 +133,15 @@ def optimize_einsums(graph: fx.Graph, contract_kwargs: dict = {}) -> fx.Graph:
                 # We have shapes, so:
                 # Determine the optimal contraction
                 path, path_info = opt_einsum.contract_path(
-                    node.args[0],  # the einstr
-                    *shapes,
-                    shapes=True,
-                    **contract_kwargs,
+                    node.args[0], *shapes, shapes=True, **contract_kwargs,  # the einstr
                 )
                 # By wrapping the arguments with proxies,
                 # we can dispatch to opt_einsum and implicitly
                 # add it to the Graph by symbolically tracing it.
                 proxy_args = [
-                    fx.Proxy(env[x.name], tracer=tracer) if isinstance(x, fx.Node) else x
+                    fx.Proxy(env[x.name], tracer=tracer)
+                    if isinstance(x, fx.Node)
+                    else x
                     for x in node.args
                 ]
                 # Use _core_contract to avoid `len()` calls that
