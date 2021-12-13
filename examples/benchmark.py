@@ -52,9 +52,6 @@ def main():
     for sub in subs:
         shapes.append(tuple(modes[k] for k in sub))
 
-    # from https://pytorch.org/docs/master/_modules/torch/utils/benchmark/utils/timer.html#Timer.timeit
-    warmup = max(int(args.n // 100), 1)
-
     inputs = tuple(
         torch.randn(shape, device=device, requires_grad=args.backward)
         for shape in shapes
