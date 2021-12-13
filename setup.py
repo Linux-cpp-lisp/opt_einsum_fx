@@ -74,7 +74,7 @@ if WITH_CUDA:
 
 setuptools.setup(
     name="opt_einsum_fx",
-    version="0.1.2",
+    version="0.1.4",  # remember to update in `__init__.py` too!
     author="Linux-cpp-lisp",
     url="https://github.com/Linux-cpp-lisp/opt_einsum_fx",
     description="Einsum optimization using opt_einsum and PyTorch FX",

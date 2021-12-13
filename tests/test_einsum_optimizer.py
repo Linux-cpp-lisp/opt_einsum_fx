@@ -2,9 +2,8 @@ import pytest
 
 import torch
 import torch.fx
-from torch.fx.passes.shape_prop import ShapeProp
 
-from opt_einsum_fx import optimize_einsums, optimize_einsums_full, jitable
+from opt_einsum_fx import optimize_einsums, optimize_einsums_full, jitable, EfficientShapeProp
 
 
 def einmatmul(x, y):
@@ -74,7 +73,7 @@ def test_optimize_einsums(einfunc, allclose):
     func_res = einfunc(x, y)
 
     func_fx = torch.fx.symbolic_trace(einfunc)
-    sp = ShapeProp(func_fx)
+    sp = EfficientShapeProp(func_fx)
     sp.run(x, y)
 
     func_fx_res = func_fx(x, y)
