@@ -1,5 +1,4 @@
 import argparse
-import logging
 
 import torch
 from torch import fx
@@ -56,14 +55,9 @@ def main():
     # from https://pytorch.org/docs/master/_modules/torch/utils/benchmark/utils/timer.html#Timer.timeit
     warmup = max(int(args.n // 100), 1)
 
-    inputs = iter(
-        [
-            tuple(
-                torch.randn(shape, device=device, requires_grad=args.backward)
-                for shape in shapes
-            )
-            for _ in range(args.n + warmup + 1)
-        ]
+    inputs = tuple(
+        torch.randn(shape, device=device, requires_grad=args.backward)
+        for shape in shapes
     )
 
     # Make kernel
@@ -73,7 +67,7 @@ def main():
     graph.output(out)
     gmod = fx.GraphModule({}, graph)
     if args.opt_ein:
-        gmod = optimize_einsums_full(gmod, next(inputs), use_cuTENSOR=args.cuTENSOR)
+        gmod = optimize_einsums_full(gmod, inputs, use_cuTENSOR=args.cuTENSOR)
     # compile
     if args.jit:
         gmod = jitable(gmod)
@@ -86,7 +80,9 @@ def main():
     t = Timer(
         stmt=(
             "gmod.zero_grad()\n"
-            "out = gmod(*next(inputs))\n"
+            "with torch.no_grad():\n"
+            "    [t.mul_(1.01) for t in inputs]\n"
+            "out = gmod(*inputs)\n"
             + ("out.tanh().sum().backward()\n" if args.backward else "")
         ),
         globals={"gmod": gmod, "inputs": inputs},
