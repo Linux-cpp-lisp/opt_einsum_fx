@@ -29,7 +29,7 @@ if not torch.cuda.is_available():
 )  # Since the test is randomized, run it multiple times
 def test_like_torch(einstr, _):
     device = "cuda"
-    atol = {torch.float32: 1e-5, torch.float64: 1e-8}[torch.get_default_dtype()]
+    atol = {torch.float32: 1e-4, torch.float64: 1e-8}[torch.get_default_dtype()]
     # Shapes
     modes = set(einstr) - {",", "-", ">"}
     extents = {m: random.choice([1, 2, 3, 5, 11, 27, 50]) for m in modes}
@@ -74,7 +74,7 @@ def test_like_torch(einstr, _):
     "dtype,atol",
     [
         (torch.float16, 1e-4),
-        (torch.float32, 1e-5),
+        (torch.float32, 1e-4),
         (torch.float64, 1e-8),
     ],  # , torch.bfloat16]
 )

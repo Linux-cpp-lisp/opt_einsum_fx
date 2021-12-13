@@ -10,7 +10,7 @@ if torch.cuda.is_available():
 
 FLOAT_TOLERANCE = {
     t: torch.as_tensor(v, dtype=t)
-    for t, v in {torch.float32: 2e-5, torch.float64: 1e-10}.items()
+    for t, v in {torch.float32: 1e-5, torch.float64: 1e-10}.items()
 }
 
 
