@@ -64,11 +64,7 @@ struct CuTensorTypeTraits<double> {
 template<>
 struct CuTensorTypeTraits<float> {
   static const cudaDataType_t cudaType = CUDA_R_32F;
-#ifdef CUTENSOR_USE_TF32
-  static const cutensorComputeType_t cutensorType = CUTENSOR_COMPUTE_TF32;
-#else
   static const cutensorComputeType_t cutensorType = CUTENSOR_COMPUTE_32F;
-#endif
   typedef float ScalarType;
 };
 
@@ -284,6 +280,17 @@ struct Einsum
 
         cudaDataType_t cudaType = CuTensorTypeTraits<ComputeType>::cudaType;
         cutensorComputeType_t computeType = CuTensorTypeTraits<ComputeType>::cutensorType;
+
+        #ifdef CUTENSOR_HAS_TF32
+        // If we have TF32, check the PyTorch flag to decide
+        // whether to use it. We use it only as the compute
+        // type to replace float32
+        if ( computeType == CUTENSOR_COMPUTE_32F ) {
+            if ( at::globalContext().allowTF32CuBLAS() ) {
+                computeType = CUTENSOR_COMPUTE_TF32;
+            }
+        }
+        #endif
 
         cutensorTensorDescriptor_t descA;
         HANDLE_ERROR(cutensorInitTensorDescriptor(handle,

@@ -46,12 +46,9 @@ if WITH_CUDA:
             versioned_path = os.path.join(root, "lib", cuda_version.split(".")[0])
         library_dirs.append(versioned_path)
 
-    # Determine whether to use TensorFloat32
-    # This option controls matmul in pytorch, which is used internally
-    # in tensordot, and thus is appropriate to use for einsum
-    # Note that a seperate flag exists in PyTorch for cuDNN
-    # See https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices
-    use_tf32 = torch.backends.cuda.matmul.allow_tf32
+    # Determine whether TensorFloat32 is available
+    tf32_avail = torch.backends.cuda.matmul.allow_tf32
+    print(f"PyTorch has TF32 available: {tf32_avail}")
 
     extensions = [
         CUDAExtension(
@@ -61,7 +58,7 @@ if WITH_CUDA:
             define_macros=[
                 ("_GLIBCXX_USE_CXX11_ABI", str(int(torch._C._GLIBCXX_USE_CXX11_ABI))),
             ]
-            + ([("CUTENSOR_USE_TF32", "true")] if use_tf32 else []),
+            + ([("CUTENSOR_HAS_TF32", "true")] if tf32_avail else []),
             extra_compile_args=["-std=c++14", "-fopenmp"],
             extra_link_args=["-std=c++14", "-fopenmp"],
             include_dirs=include_dirs,

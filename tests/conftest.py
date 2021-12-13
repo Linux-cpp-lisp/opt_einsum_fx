@@ -2,9 +2,15 @@ import pytest
 
 import torch
 
+# Disable TF32 for PyTorch reference calcs
+# See https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices
+if torch.cuda.is_available():
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+
 FLOAT_TOLERANCE = {
     t: torch.as_tensor(v, dtype=t)
-    for t, v in {torch.float32: 1e-5, torch.float64: 1e-10}.items()
+    for t, v in {torch.float32: 2e-5, torch.float64: 1e-10}.items()
 }
 
 
