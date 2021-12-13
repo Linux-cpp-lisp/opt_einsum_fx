@@ -17,7 +17,7 @@ def optimize_einsums_full(
     model: Union[torch.nn.Module, Callable, fx.Graph],
     example_inputs: tuple,
     contract_kwargs: dict = {},
-    use_cuTENSOR: Optional[bool] = None,
+    use_cuTENSOR: bool = False,
     tracer_class: type = fx.Tracer,
 ) -> Union[fx.GraphModule, fx.Graph]:
     """Optimize einsums in ``model`` for ``example_inputs``.
@@ -88,7 +88,7 @@ def optimize_einsums_full(
 
 # Based on "Proxy Retracing" example in https://pytorch.org/docs/stable/fx.html
 def optimize_einsums(
-    graph: fx.Graph, contract_kwargs: dict = {}, use_cuTENSOR: Optional[bool] = None
+    graph: fx.Graph, contract_kwargs: dict = {}, use_cuTENSOR: bool = False
 ) -> fx.Graph:
     """Optimize einsums in a ``torch.fx.Graph`` using ``opt_einsum``.
 
