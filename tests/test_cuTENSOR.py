@@ -32,7 +32,7 @@ def test_like_torch(einstr, _):
     atol = {torch.float32: 1e-4, torch.float64: 1e-8}[torch.get_default_dtype()]
     # Shapes
     modes = set(einstr) - {",", "-", ">"}
-    extents = {m: random.choice([1, 2, 3, 5, 11, 27, 50]) for m in modes}
+    extents = {m: random.choice([2, 3, 5, 11, 27, 50]) for m in modes}
     if "->" in einstr:
         modesAB, modesC = einstr.split("->")
     else:
@@ -73,8 +73,8 @@ def test_like_torch(einstr, _):
     # TODO: figure out bfloat16
     "dtype,atol",
     [
-        (torch.float16, 1e-4),
-        (torch.float32, 1e-4),
+        (torch.float16, 1e-3),
+        (torch.float32, 1e-5),
         (torch.float64, 1e-8),
     ],  # , torch.bfloat16]
 )
