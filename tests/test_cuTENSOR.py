@@ -74,7 +74,7 @@ def test_like_torch(einstr, _):
     "dtype,atol",
     [
         (torch.float16, 1e-3),
-        (torch.float32, 1e-5),
+        (torch.float32, 1e-4),
         (torch.float64, 1e-8),
     ],  # , torch.bfloat16]
 )
