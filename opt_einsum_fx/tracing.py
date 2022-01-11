@@ -156,11 +156,15 @@ def make_fx_dynamic(f: Callable, example_inputs: List[tuple]) -> fx.GraphModule:
                     # convert back to orig list/tuple type
                     new_arg = type(args[0])(new_shape)
             else:
-                # it's some other constant
-                # sanity check that its consistent
-                assert _count_unique_unhashable(args) == 1
-                # since its a constant, can take it from any graph, so just choose the first:
-                new_arg = args[0]
+                # it's some other constant or tuple/list of nodes
+                # since it could have nodes, must take from graph_out
+                new_arg = node_out.args[arg_i]
+                if not (
+                    (isinstance(args[0], tuple) or isinstance(args[0], list))
+                    and isinstance(args[0][0], fx.Node)
+                ):
+                    # sanity check that its consistent
+                    assert _count_unique_unhashable(args) == 1
 
             # add argument
             args_out.append(new_arg)

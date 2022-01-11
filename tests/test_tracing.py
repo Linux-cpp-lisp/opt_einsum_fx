@@ -10,21 +10,25 @@ from opt_einsum_fx.tracing import make_fx_dynamic
 def explict_reshape(x):
     bdim, fdim = x.shape
     y = x.view(-1).tanh()
-    return y.view(bdim, fdim)  # use a dim that will be traced as constant
+    return (y.view(bdim, fdim),)  # use a dim that will be traced as constant
 
 
 def simple(x):
     # do nothing dynamic
-    return 2.7 * x.square() * x.tanh() + 3.0
+    return (2.7 * x.square() * x.tanh() + 3.0,)
 
 
 def grad(x):
     x = x.clone().requires_grad_(True)
     y = x.tanh().square().sum()
     grad = torch.autograd.grad(y, x)[0]
-    return grad
+    return (grad,)
 
 
+# TODO test einsum
+# TODO test einsum w grad
+
+# TODO: generalize to more than one arg
 @pytest.mark.parametrize("func", [explict_reshape, simple, grad])
 def test_trace_like_func(func):
     bdims_trace = [1, 3, 4]
