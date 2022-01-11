@@ -1,7 +1,8 @@
 import pytest
 
 import torch
-from functorch import make_fx
+
+functorch = pytest.importorskip("functorch")
 
 from opt_einsum_fx.tracing import make_fx_dynamic
 
@@ -49,7 +50,7 @@ def test_no_dynamic_simple():
     trace_inputs = [(torch.randn(bdim, 5),) for bdim in bdims_trace]
     test_inputs = [(torch.randn(bdim, 5),) for bdim in bdims_test]
     # now trace out the function
-    traced = make_fx(func)(*trace_inputs[0])
+    traced = functorch.make_fx(func)(*trace_inputs[0])
     traced_dynamic = make_fx_dynamic(func, example_inputs=trace_inputs)
     # they should be the same, but with one dynamic shape extraction
     # which is one getattr and one getitem
