@@ -26,20 +26,36 @@ def grad(x):
     return (grad,)
 
 
+def einsum(x):
+    # involve an explicit reshape to test
+    # involve dynamic dimension in dim != 0 to test
+    return (torch.einsum("zi,jz->zij", x, x.view(-1).reshape(x.shape[1], x.shape[0])),)
+
+
+def grad_einsum(x):
+    x = x.clone().requires_grad_(True)
+    y = einsum(x)[0].sum()
+    grad = torch.autograd.grad([y], [x])[0]
+    return (grad,)
+
+
 # For TorchScript, FX tracing requires that the top-level function be in Python
 # So we do a trivial wrapper here
 _simple_ts = torch.jit.script(simple)
+_grad_ts = torch.jit.script(grad)
+_ein_ts = torch.jit.script(einsum)
 
 
 def simple_ts(x):
     return _simple_ts(x)
 
 
-_grad_ts = torch.jit.script(grad)
-
-
 def grad_ts(x):
     return _grad_ts(x)
+
+
+def einsum_ts(x):
+    return _ein_ts(x)
 
 
 # TODO test einsum
@@ -48,7 +64,7 @@ def grad_ts(x):
 # TODO: generalize to more than one arg
 @pytest.mark.parametrize(
     "func",
-    [explict_reshape, simple, grad, simple_ts, grad_ts],
+    [explict_reshape, simple, grad, simple_ts, grad_ts, einsum, grad_einsum, einsum_ts],
 )
 def test_trace_like_func(func):
     bdims_trace = [1, 3, 4]
