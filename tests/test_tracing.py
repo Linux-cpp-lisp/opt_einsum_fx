@@ -21,15 +21,35 @@ def simple(x):
 def grad(x):
     x = x.clone().requires_grad_(True)
     y = x.tanh().square().sum()
-    grad = torch.autograd.grad(y, x)[0]
+    grad = torch.autograd.grad([y], [x])[0]
+    assert grad is not None  # torchscript
     return (grad,)
+
+
+# For TorchScript, FX tracing requires that the top-level function be in Python
+# So we do a trivial wrapper here
+_simple_ts = torch.jit.script(simple)
+
+
+def simple_ts(x):
+    return _simple_ts(x)
+
+
+_grad_ts = torch.jit.script(grad)
+
+
+def grad_ts(x):
+    return _grad_ts(x)
 
 
 # TODO test einsum
 # TODO test einsum w grad
 
 # TODO: generalize to more than one arg
-@pytest.mark.parametrize("func", [explict_reshape, simple, grad])
+@pytest.mark.parametrize(
+    "func",
+    [explict_reshape, simple, grad, simple_ts, grad_ts],
+)
 def test_trace_like_func(func):
     bdims_trace = [1, 3, 4]
     bdims_test = [2, 7, 5]
