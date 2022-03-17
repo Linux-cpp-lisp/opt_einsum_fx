@@ -4,6 +4,7 @@ import torch
 
 functorch = pytest.importorskip("functorch")
 
+from opt_einsum_fx import optimize_einsums_full
 from opt_einsum_fx.tracing import make_fx_dynamic
 
 
@@ -32,9 +33,16 @@ def einsum(x):
     return (torch.einsum("zi,jz->zij", x, x.view(-1).reshape(x.shape[1], x.shape[0])),)
 
 
-def grad_einsum(x):
+_einsum_opted = optimize_einsums_full(einsum, example_inputs=(torch.randn(11, 4),))
+
+
+def einsum_opted(x):
+    return _einsum_opted(x)
+
+
+def grad_einsum_opt(x):
     x = x.clone().requires_grad_(True)
-    y = einsum(x)[0].sum()
+    y = einsum_opted(x)[0].sum()
     grad = torch.autograd.grad([y], [x])[0]
     return (grad,)
 
@@ -44,6 +52,7 @@ def grad_einsum(x):
 _simple_ts = torch.jit.script(simple)
 _grad_ts = torch.jit.script(grad)
 _ein_ts = torch.jit.script(einsum)
+_ein_opt_ts = torch.jit.script(_einsum_opted)
 
 
 def simple_ts(x):
@@ -58,13 +67,28 @@ def einsum_ts(x):
     return _ein_ts(x)
 
 
+def einsum_opt_ts(x):
+    return _ein_opt_ts(x)
+
+
 # TODO test einsum
 # TODO test einsum w grad
 
 # TODO: generalize to more than one arg
 @pytest.mark.parametrize(
     "func",
-    [explict_reshape, simple, grad, simple_ts, grad_ts, einsum, grad_einsum, einsum_ts],
+    [
+        explict_reshape,
+        simple,
+        grad,
+        simple_ts,
+        grad_ts,
+        einsum,
+        einsum_opted,
+        grad_einsum_opt,
+        einsum_ts,
+        einsum_opt_ts,
+    ],
 )
 def test_trace_like_func(func):
     bdims_trace = [1, 3, 4]
